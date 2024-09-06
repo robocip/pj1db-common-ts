@@ -11,8 +11,10 @@ const SOLID_COLOR = 0x002222;
 const WIREFRAME_SELECTED_COLOR = 0x444444;
 const SOLID_SELECTED_COLOR = 0x222222;
 
-const CONTROL_POINT_COLOR = 0xffff00;
-const CONTROL_LINE_COLOR = 0xff00ff;
+const CONTROL_POINT_COLOR = 0xffffff;
+const CONTROL_LINE_COLOR = 0xffff00;
+const CONTROL_PRIMARY_DIRECTION_COLOR = 0x00ffff;
+const CONTROL_SECONDARY_DIRECTION_COLOR = 0xff00ff;
 const raycaster = new THREE.Raycaster();
 
 const vecDict: Dict<THREE.Vector3> = {
@@ -128,12 +130,17 @@ class LoadedModel {
   controlPointRim: THREE.Mesh;
 
   controlLineZ: THREE.Mesh;
+  
+  controlPrimaryDirection: THREE.Mesh;
+
+  controlSecondaryDirection: THREE.Mesh;
 
   loadedMeshList: THREE.Mesh[];
 
   loadedOriginalMaterial: THREE.Material[];
 
   constructor(gltf: GLTF) {
+    console.log("LoadedModel construct");
     this.scene = gltf.scene;
     this.loadedMeshList = LoadedModel._findAllMeshes(gltf.scene);
     this.loadedOriginalMaterial = this.loadedMeshList.map((mesh: THREE.Mesh) =>
@@ -147,6 +154,8 @@ class LoadedModel {
     this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
     [this.controlPoint, this.controlPointRim] = this._createControlPoint();
     this.controlLineZ = this._createControlLineZ();
+    this.controlPrimaryDirection = this._createControlPrimaryDirection();
+    this.controlSecondaryDirection = this._createControlSecondaryDirection();
     this.loadedMeshList.forEach((mesh) => {
       // it is needed for Raycast to calc intersection of mesh
       mesh.geometry.computeBoundingBox();
@@ -214,6 +223,61 @@ class LoadedModel {
     mesh.position.x = this.bbox.centerPos.x;
     mesh.position.y = this.bbox.centerPos.y;
     mesh.position.z = this.bbox.centerPos.z;
+    return mesh;
+  }
+  
+  _createControlPrimaryDirection() {
+    // 初期値はz軸
+    return this._createControlDirection(CONTROL_PRIMARY_DIRECTION_COLOR, "z");
+  }
+
+  _createControlSecondaryDirection() {
+    // 初期値はx軸
+    return this._createControlDirection(CONTROL_SECONDARY_DIRECTION_COLOR, "x");
+  }
+
+  _createControlDirection(
+    color: THREE.ColorRepresentation,
+    axis: "x" | "y" | "z"
+  ) {
+    const radius = this.bbox ? this.bbox.direction.length() / 60 : 1;
+    const length = this.bbox.direction.length();
+    const material = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.5,
+    });
+    const arrowLength = length * 0.5;
+    const arrowRodLength = arrowLength / 2;
+    const arrowCornLength = arrowLength / 2;
+
+    const mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, arrowRodLength, 32, 1, false),
+      material
+    );
+
+    if (axis === "x") {
+      mesh.rotation.set(0, 0, -Math.PI / 2);
+      mesh.position.x = this.bbox.centerPos.x + length + arrowRodLength / 2;
+      mesh.position.y = this.bbox.centerPos.y;
+      mesh.position.z = this.bbox.centerPos.z;
+    } else if (axis === "y") {
+      mesh.position.x = this.bbox.centerPos.x;
+      mesh.position.y = this.bbox.centerPos.y + length + arrowRodLength / 2;
+      mesh.position.z = this.bbox.centerPos.z;
+    } else if (axis === "z") {
+      mesh.rotation.set(Math.PI / 2, 0, 0);
+      mesh.position.x = this.bbox.centerPos.x;
+      mesh.position.y = this.bbox.centerPos.y;
+      mesh.position.z = this.bbox.centerPos.z + length + arrowRodLength / 2;
+    }
+    const childMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(arrowCornLength / 2, arrowCornLength, 32),
+      material
+    );
+    childMesh.position.y = arrowRodLength / 2 + arrowCornLength / 2;
+    mesh.add(childMesh);
+
     return mesh;
   }
 
@@ -286,6 +350,8 @@ type Options = {
   displayGrid: boolean;
   displayControlPoint: boolean;
   displayControlLineZ: boolean;
+  displayControlPrimaryDirection: boolean;
+  displayControlSecondaryDirection: boolean;
   useOrthoCamera: boolean;
   lookAtType: LookAtType;
   materialType: MaterialType;
@@ -311,6 +377,8 @@ const DEFAULT_OPTION: Options = {
   displayGrid: true,
   displayControlPoint: false,
   displayControlLineZ: false,
+  displayControlPrimaryDirection: false,
+  displayControlSecondaryDirection: false,
   useOrthoCamera: false,
   lookAtType: "modelCenter",
   materialType: "original",
@@ -323,7 +391,7 @@ const DEFAULT_OPTION: Options = {
 };
 
 type ThreeControls = {
-  // cameraの生成時に作成する合わせて生成するもの
+  // cameraの生成時に合わせて生成するもの
   camera: THREE.Camera;
   cameraLight: THREE.Light;
   orbit: OrbitControls;
@@ -387,10 +455,10 @@ export default class ThreeControl {
     options: OptionsView3D = {},
     callbacks: Callbacks = {}
   ) {
-    console.log("given options:");
+    console.log("ThreeControl given options:");
     console.log(options);
     this.options = { ...DEFAULT_OPTION, ...options };
-    console.log("calculated options:");
+    console.log("ThreeControl calculated options:");
     console.log(this.options);
     this.parentDomId = parentDomId;
     this.callbacks = callbacks;
@@ -408,7 +476,10 @@ export default class ThreeControl {
         const objectList = this._getObjectListAtMouseCursol();
         if (objectList.length > 0) {
           this.objects.selectedObject = objectList[0];
-          console.log("object selected", this.objects.selectedObject);
+          console.log(
+            "ThreeControl object selected",
+            this.objects.selectedObject
+          );
         } else {
           if (this.options.keepSelectionWhenClickBlank) return;
           this.objects.selectedObject = undefined;
@@ -515,7 +586,7 @@ export default class ThreeControl {
       throw new Error(`parent DOM id not found: ${parentDomId}`);
     }
 
-    console.log("create view3D");
+    console.log("ThreeControl create view3D");
     this.scene = new THREE.Scene();
     this.sceneOverlay = new THREE.Scene();
 
@@ -556,6 +627,7 @@ export default class ThreeControl {
     if (elem && this.renderer.domElement.parentElement === elem)
       elem.removeChild(this.renderer.domElement);
     this.renderer.dispose();
+    // this.renderer.forceContextLoss();
     console.log("remove view3D");
   }
 
@@ -575,6 +647,12 @@ export default class ThreeControl {
       if (this.options.displayControlLineZ) {
         model.controlLineZ.removeFromParent();
       }
+      if (this.options.displayControlPrimaryDirection) {
+        model.controlPrimaryDirection.removeFromParent();
+      }
+      if (this.options.displayControlSecondaryDirection) {
+        model.controlSecondaryDirection.removeFromParent();
+      }
     });
     this.objects = {
       dragConstraint: {},
@@ -593,10 +671,10 @@ export default class ThreeControl {
     loader.load(
       file_name,
       (gltf: GLTF) => {
-        console.log("gltf comes with:");
+        console.log("ThreeControl gltf comes with:");
         this._traceObjectTree(gltf.scene);
         this.scene.add(gltf.scene);
-        console.log("scene changed:");
+        console.log("ThreeControl scene changed:");
         this._traceObjectTree();
         this._render(); // pre-rendering for calculating boundingbox
         const model = new LoadedModel(gltf);
@@ -647,17 +725,16 @@ export default class ThreeControl {
             },
           ];
         }
+        if (this.options.displayControlPrimaryDirection) {
+          this.sceneOverlay.add(model.controlPrimaryDirection);
+        }
+        if (this.options.displayControlSecondaryDirection) {
+          this.sceneOverlay.add(model.controlSecondaryDirection);
+        }
+
         const drag = this._createDragControl(this.controls.camera, this.controls.drag);
         this.resetDragControl(drag) // needed for reflecting this.objects.draggableObjects
 
-        console.log("this.objects.draggableObjects");
-        this.objects.draggableObjects.forEach((obj) => {
-          console.log(obj.name);
-        });
-        console.log("this.controls.drag.getObjects()");
-        this.controls.drag.getObjects().forEach((obj) => {
-          console.log(obj.name);
-        });
         this.objects.loadedModels.push(model);
         if(this.options.objectSelectable){
           const filtered=model.loadedMeshList.filter(
@@ -854,6 +931,65 @@ export default class ThreeControl {
       this.objects.loadedModels[0].controlLineZ.visible = true;
       this.objects.loadedModels[0].controlLineZ.position.x = x;
       this.objects.loadedModels[0].controlLineZ.position.y = y;
+    }
+  }
+
+  setControlPrimaryDirection(
+    theta_rad: number | undefined = undefined,
+    phi_rad: number | undefined = undefined
+  ) {
+    const loadedModel = this.objects.loadedModels[0];
+    if (!loadedModel) return;
+    ThreeControl._setControlDirection(
+      loadedModel.controlPrimaryDirection,
+      loadedModel.bbox,
+      theta_rad,
+      phi_rad
+    );
+  }
+
+  setControlSecondaryDirection(
+    theta_rad: number | undefined = undefined,
+    phi_rad: number | undefined = undefined
+  ) {
+    const loadedModel = this.objects.loadedModels[0];
+    if (!loadedModel) return;
+    ThreeControl._setControlDirection(
+      loadedModel.controlSecondaryDirection,
+      loadedModel.bbox,
+      theta_rad,
+      phi_rad
+    );
+  }
+
+  static _setControlDirection(
+    target: THREE.Mesh,
+    bbox: BoundingBox,
+    theta_rad: number | undefined,
+    phi_rad: number | undefined
+  ) {
+    if (!target) return;
+
+    if (typeof phi_rad === "undefined" || typeof theta_rad === "undefined") {
+      target.visible = false;
+    } else {
+      target.visible = true;
+      target.rotation.set(Math.PI / 2, 0, 0); // 円柱をz軸方向に立ててから
+      target.rotateOnAxis(
+        new THREE.Vector3(Math.sin(phi_rad), 0, Math.cos(phi_rad)).normalize(),
+        -theta_rad
+      ); // 円柱を回転する
+
+      const length = bbox.direction.length();
+      const arrowLength = length * 0.5;
+      const arrowRodLength = arrowLength / 2;
+      const ratio = length + arrowRodLength / 2;
+
+      target.position.x =
+        bbox.centerPos.x + Math.cos(phi_rad) * Math.sin(theta_rad) * ratio;
+      target.position.y =
+        bbox.centerPos.y + Math.sin(phi_rad) * Math.sin(theta_rad) * ratio;
+      target.position.z = bbox.centerPos.z + Math.cos(theta_rad) * ratio;
     }
   }
 

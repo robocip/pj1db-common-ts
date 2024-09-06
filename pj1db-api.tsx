@@ -9,6 +9,7 @@ export const systemKeys = {
   version: false,
   original: true,
   creator: false,
+  created: true,
   inserted: true,
   deleted: true,
   updated: true,
