@@ -1,0 +1,66 @@
+/* 視点変更アイコン */
+.perspective-icon-box {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+}
+
+.perspective-icon {
+  width: 16px;
+  height: 16px;
+  position: absolute;
+}
+
+.perspective-icon:hover {
+  cursor: pointer;
+}
+
+.perspective-icon-x-p {
+  top: 40px;
+  right: 16px;
+}
+
+.perspective-icon-x-n {
+  top: 18px;
+  right: 44px;
+}
+
+.perspective-icon-y-p {
+  top: 24px;
+  right: 0px;
+}
+
+.perspective-icon-y-n {
+  top: 34px;
+  right: 56px;
+}
+
+.perspective-icon-z-p {
+  top: 0px;
+  right: 32px;
+}
+
+.perspective-icon-z-n {
+  top: 56px;
+  right: 32px;
+}
+
+.perspective-icon-equiangular {
+  width: 11px;
+  height: 11px;
+  position: absolute;
+  top: 32px;
+  right: 34px;
+}
+
+.perspective-icon-equiangular:hover {
+  cursor: pointer;
+}
+
+.perspective-icon-line {
+  width: 100px;
+  height: 100px;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
