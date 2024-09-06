@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { Flex, RadioGroupField, Radio } from "@aws-amplify/ui-react";
 
@@ -44,7 +44,11 @@ export const useThree = () => {
   };
 };
 
+/* domが作成された後に、ThreeControlを作成し、props.three.setControl()でstateにセットします
+ */
+
 export default function View3D(props: Props) {
+  console.log("View3D render");
   const [cameraPos, setCameraPos] = useState<number[]>([0, 0, 0]);
   const [cameraZoom, setCameraZoom] = useState<number | undefined>();
   const [hoverObjectList, setHoverObjectList] = useState<THREE.Object3D[]>([]);
@@ -52,16 +56,33 @@ export default function View3D(props: Props) {
     THREE.Object3D | undefined
   >(undefined);
 
+  const onObjectHover = useCallback((objectList: THREE.Object3D[]) => {
+    if (objectList.length !== hoverObjectList.length) {
+      console.log(
+        `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
+      );
+      setHoverObjectList(objectList);
+    } else {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const obj of objectList) {
+        if (!hoverObjectList.includes(obj)) {
+          console.log(`View3D hover object changed ${obj.name}`);
+          setHoverObjectList(objectList);
+          break;
+        }
+      }
+    }
+  }, [hoverObjectList]);
+
   useEffect(() => {
     const control = new ThreeControl(VIEW_SIZE, "preview", props.options, {
       onOrbitChange: (camPos: number[], zoom: number | undefined) => {
+        console.log("View3D onOrbitChange");
         setCameraPos(camPos);
         setCameraZoom(zoom);
       },
-      onObjectHover: (objectList: THREE.Object3D[]) => {
-        setHoverObjectList(objectList);
-      },
       onObjectSelected: (object: THREE.Object3D | undefined) => {
+        console.log("View3D onObjectSelected");
         setSelectedObject(object);
         if (props.callbacks?.onObjectSelected)
           props.callbacks.onObjectSelected(object);
@@ -74,11 +95,20 @@ export default function View3D(props: Props) {
         if (props.callbacks?.onControlLineZMove)
           props.callbacks.onControlLineZMove(x, y);
       },
+      onObjectHover: (objectList: THREE.Object3D[]) => {
+        onObjectHover(objectList);
+      },
     });
     props.three.setControl(control);
     return control.getUnmountFunc();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // 最新のhoverObjectListがonObjectHoverで使われるようにハンドラを更新します（＝クロージャーが最新の値を参照する）
+    const cont = props.three.control;
+    if (cont) cont.callbacks.onObjectHover = onObjectHover;
+  }, [hoverObjectList, onObjectHover, props.three.control]);
 
   useEffect(() => {
     console.log("useEffect [props.url] called", props.three.control);
@@ -94,16 +124,16 @@ export default function View3D(props: Props) {
   }, [props.three.control, props.url]);
 
   const changeGridSize = (size: number) => {
-    if (props.three.control) props.three.control?.setGridUnitSize(size);
+    if (props.three.control) props.three.control.setGridUnitSize(size);
   };
   const changeCameraType = (useOrthoCamera: boolean) => {
-    if (props.three.control) props.three.control?.setCameraType(useOrthoCamera);
+    if (props.three.control) props.three.control.setCameraType(useOrthoCamera);
   };
   const changeLookAtType = (lookAtType: LookAtType) => {
-    if (props.three.control) props.three.control?.setLookAtType(lookAtType);
+    if (props.three.control) props.three.control.setLookAtType(lookAtType);
   };
   const changeMaterialType = (materialType: MaterialType) => {
-    if (props.three.control) props.three.control?.setMaterialType(materialType);
+    if (props.three.control) props.three.control.setMaterialType(materialType);
   };
 
   return (
@@ -117,7 +147,7 @@ export default function View3D(props: Props) {
           backgroundColor: "gray",
         }}
       >
-        {props.three ? (
+        {props.three.control ? (
           <div>
             <AxisIconBox
               onAxisSelected={(viewpointType) => {
