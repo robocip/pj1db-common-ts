@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import { API, Auth } from "aws-amplify";
-import { ReactElement } from "react";
 
 import { FuncDef ,Dict} from "./api/pj1db-api";
 
@@ -62,8 +61,6 @@ export type ApiResult<ResponseType> = {
   errorInfo: ErrorInfo | undefined;
   response: ResponseType | undefined;
   date: Date;
-
-  getErrorNode: (errorLabel: string) => ReactElement;
   getDateTimeString: () => string;
 };
 
@@ -113,7 +110,6 @@ export async function callWebApi<ResponseType>(
         errorInfo: undefined,
         response,
         date,
-        getErrorNode: (errorLabel: string) => <div>{errorLabel}</div>,
         getDateTimeString: () =>
           `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
       };
@@ -130,16 +126,6 @@ export async function callWebApi<ResponseType>(
         errorInfo,
         response: undefined,
         date,
-        getErrorNode: (errorLabel: string) => (
-          <div>
-            {errorLabel}({errorInfo.msg})
-            <pre>
-              {errorInfo.response
-                ? JSON.stringify(errorInfo.response.data, null, "\t")
-                : "no response"}
-            </pre>
-          </div>
-        ),
         getDateTimeString: () =>
           `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
       };

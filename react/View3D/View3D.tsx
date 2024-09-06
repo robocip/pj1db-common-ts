@@ -6,7 +6,7 @@ import ThreeControl, {
   LookAtType,
   MaterialType,
   OptionsView3D,
-} from "utils/common/view3d_util";
+} from "../../view3d_util";
 import AxisIconBox from "./AxisIconBox";
 
 interface Props {
