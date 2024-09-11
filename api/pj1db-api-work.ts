@@ -120,6 +120,16 @@ export type WorkDbStatusDocument = Dict<
   string | boolean | Dict<string | string[]>
 >;
 
+export type BaseFindResponse = {
+  total_count: number;
+  items: WorkAnyDocumentDict;
+};
+
+export type SpecificFindResponse<T> = {
+  total_count: number;
+  items: Dict<T>;
+};
+
 export type WorkAnyDocument =
   | WorkModelDocument
   | WorkInstanceDocument
@@ -151,6 +161,8 @@ export interface FindParam {
 
   queryAttr?: object; // work-model-attrコレクション及びwork-model-calcコレクションにおける指定条件を満たす一部のモデル情報のみを取得したい場合に指定する。
   queryCalc?: object; // query-attrとquery-calcの両方を指定した場合は、両方を満たす（AND条件）モデル情報のみを返す
+  limit?: number;
+  skip?: number;
 }
 
 export interface FindClassTreeParam {
@@ -275,7 +287,7 @@ export const workApi: Dict<FuncDef> = {
     method: "post",
     name: "find_sync",
     path: ["hierarchy"],
-    query: ["version", "deleted"],
+    query: ["version", "deleted", "limit", "skip"],
     body: ["queryAttr", "queryCalc"],
     omitKeyWhenValueUndefined: true,
   },
@@ -387,10 +399,10 @@ export const workApiCallDef = {
       };
     },
     convertResponseToResult: <T extends WorkAnyDocument>(
-      res: Dict<T>
+      res: BaseFindResponse
     ): T | undefined => {
-      const keys = Object.keys(res);
-      return keys.length > 0 ? res[keys[0]] : undefined;
+      const keys = Object.keys(res.items);
+      return keys.length > 0 ? (res.items[keys[0]] as T) : undefined;
     },
     funcDef: workApi.find,
   },
