@@ -34,13 +34,23 @@ export type Callbacks = {
 export type ThreeState = {
   control: ThreeControl | undefined;
   setControl: React.Dispatch<React.SetStateAction<ThreeControl | undefined>>;
+  loadCount: number;
+  setLoadCount: React.Dispatch<React.SetStateAction<number>>;
+  loading: boolean;
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export const useThree = () => {
   const [control, setControl] = useState<ThreeControl | undefined>();
+  const [loadCount, setLoadCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
   return {
     control,
     setControl,
+    loadCount,
+    setLoadCount,
+    loading,
+    setLoading,
   };
 };
 
@@ -56,23 +66,26 @@ export default function View3D(props: Props) {
     THREE.Object3D | undefined
   >(undefined);
 
-  const onObjectHover = useCallback((objectList: THREE.Object3D[]) => {
-    if (objectList.length !== hoverObjectList.length) {
-      console.log(
-        `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
-      );
-      setHoverObjectList(objectList);
-    } else {
-      // eslint-disable-next-line no-restricted-syntax
-      for (const obj of objectList) {
-        if (!hoverObjectList.includes(obj)) {
-          console.log(`View3D hover object changed ${obj.name}`);
-          setHoverObjectList(objectList);
-          break;
+  const onObjectHover = useCallback(
+    (objectList: THREE.Object3D[]) => {
+      if (objectList.length !== hoverObjectList.length) {
+        console.log(
+          `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
+        );
+        setHoverObjectList(objectList);
+      } else {
+        // eslint-disable-next-line no-restricted-syntax
+        for (const obj of objectList) {
+          if (!hoverObjectList.includes(obj)) {
+            console.log(`View3D hover object changed ${obj.name}`);
+            setHoverObjectList(objectList);
+            break;
+          }
         }
       }
-    }
-  }, [hoverObjectList]);
+    },
+    [hoverObjectList]
+  );
 
   useEffect(() => {
     const control = new ThreeControl(VIEW_SIZE, "preview", props.options, {
@@ -113,11 +126,15 @@ export default function View3D(props: Props) {
   useEffect(() => {
     console.log("useEffect [props.url] called", props.three.control);
     if (props.url && props.three.control) {
+      props.three.setLoading(true);
       props.three.control.unloadModels();
       console.log("ModelViewer call loadModel");
       props.three.control.loadModel(props.url, () => {
-        if (props.callbacks?.onLoad && props.url && props.three.control)
+        if (props.callbacks?.onLoad && props.url && props.three.control) {
           props.callbacks.onLoad(props.url, props.three.control);
+        }
+        props.three.setLoading(false);
+        props.three.setLoadCount(props.three.loadCount + 1);
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
