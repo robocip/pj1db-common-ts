@@ -99,16 +99,14 @@ class BoundingBox {
     let maxY = -Number.MAX_VALUE;
     let maxZ = -Number.MAX_VALUE;
     meshList.forEach((mesh) => {
-      const bbox = mesh.geometry.boundingBox;
+      const bbox = new THREE.Box3().setFromObject(mesh, true);
       if (bbox) {
-        const posA = mesh.localToWorld(bbox.min);
-        const posB = mesh.localToWorld(bbox.max);
-        minX = Math.min(minX, posA.x, posB.x);
-        minY = Math.min(minY, posA.y, posB.y);
-        minZ = Math.min(minZ, posA.z, posB.z);
-        maxX = Math.max(maxX, posA.x, posB.x);
-        maxY = Math.max(maxY, posA.y, posB.y);
-        maxZ = Math.max(maxZ, posA.z, posB.z);
+        minX = Math.min(minX, bbox.min.x);
+        minY = Math.min(minY, bbox.min.y);
+        minZ = Math.min(minZ, bbox.min.z);
+        maxX = Math.max(maxX, bbox.max.x);
+        maxY = Math.max(maxY, bbox.max.y);
+        maxZ = Math.max(maxZ, bbox.max.z);
       } else {
         throw new Error("mesh has no bbox");
       }
@@ -123,7 +121,12 @@ class BoundingBox {
 class LoadedModel {
   scene: THREE.Group;
 
-  bbox: BoundingBox; // ロードしたモデルの全メッシュのバウンディングボックス
+  rotation: THREE.Quaternion; // ロードしたモデルを表示前に回転させるquaternion
+
+  translation: THREE.Vector3; // ロードしたモデルを表示前に平行移動させるvector
+
+  bbox: BoundingBox; // ロードしたモデルの全メッシュのbbox。
+  // bboxはrotationの値で回転しtranslationの値で平行移動した後に測った値
 
   controlPoint: THREE.Mesh;
 
@@ -156,6 +159,8 @@ class LoadedModel {
       mesh.geometry.computeBoundingSphere();
     });
     // correct boundingbox is available after render()
+    this.rotation = new THREE.Quaternion();
+    this.translation = new THREE.Vector3();
     this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
     [this.controlPoint, this.controlPointRim] = this._createControlPoint();
     this.controlLineZ = this._createControlLineZ();
@@ -170,6 +175,11 @@ class LoadedModel {
       Math.abs(this.bbox.maxPos.x),
       Math.abs(this.bbox.maxPos.y)
     );
+  }
+
+  update_bbox() {
+    this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
+    console.log("bbox updated", this.bbox);
   }
 
   _createControlPoint() {
@@ -1004,26 +1014,26 @@ export default class ThreeControl {
     /**
      * objectを指定方向が上を向くように回転し、かつz最小の点がxy平面にくるよう平行移動します
      */
-    let minZ = Number.MAX_VALUE;
-    const meshList = this.objects.loadedModels[0].loadedMeshList;
-    if (meshList) {
-      meshList.forEach((mesh: THREE.Mesh) => {
-        const q = new THREE.Quaternion();
-        q.setFromUnitVectors(
-          new THREE.Vector3(
-            Math.cos(phi_rad) * Math.sin(theta_rad),
-            Math.sin(phi_rad) * Math.sin(theta_rad),
-            Math.cos(theta_rad)
-          ),
-          new THREE.Vector3(0, 0, 1)
-        );
+    const targetModel = this.objects.loadedModels[0];
+    if (targetModel.loadedMeshList) {
+      const q = new THREE.Quaternion();
+      q.setFromUnitVectors(
+        new THREE.Vector3(
+          Math.cos(phi_rad) * Math.sin(theta_rad),
+          Math.sin(phi_rad) * Math.sin(theta_rad),
+          Math.cos(theta_rad)
+        ),
+        new THREE.Vector3(0, 0, 1)
+      );
+      targetModel.rotation = q;
+      targetModel.loadedMeshList.forEach((mesh: THREE.Mesh) => {
         mesh.rotation.setFromQuaternion(q);
-        const bbox = new THREE.Box3().setFromObject(mesh, true);
-        minZ = Math.min(bbox.min.z, minZ);
       });
-      meshList.forEach((mesh: THREE.Mesh) => {
-        const pos = mesh.position;
-        mesh.position.set(pos.x, pos.y, pos.z - minZ);
+      targetModel.update_bbox();
+      const minZ = targetModel.bbox.minPos.z;
+      targetModel.translation = new THREE.Vector3(0, 0, -minZ);
+      targetModel.loadedMeshList.forEach((mesh: THREE.Mesh) => {
+        mesh.position.add(targetModel.translation);
       });
     }
   }
