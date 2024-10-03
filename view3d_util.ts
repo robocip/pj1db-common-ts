@@ -606,6 +606,43 @@ export default class ThreeControl {
     this.sceneOverlay.add(new THREE.AmbientLight(0x222222));
   }
 
+  updateDragConstraint(model:LoadedModel){
+    this.objects.dragConstraint[model.controlPoint.id.toString()] = [
+      {
+        key: "x",
+        min: model.bbox.minPos.x,
+        max: model.bbox.maxPos.x,
+      },
+      {
+        key: "y",
+        min: model.bbox.minPos.y,
+        max: model.bbox.maxPos.y,
+      },
+      {
+        key: "z",
+        min: model.bbox.minPos.z,
+        max: model.bbox.maxPos.z,
+      },
+    ];
+    this.objects.dragConstraint[model.controlLineZ.id.toString()] = [
+      {
+        key: "x",
+        min: model.bbox.minPos.x,
+        max: model.bbox.maxPos.x,
+      },
+      {
+        key: "y",
+        min: model.bbox.minPos.y,
+        max: model.bbox.maxPos.y,
+      },
+      {
+        key: "z",
+        min: model.bbox.centerPos.z,
+        max: model.bbox.centerPos.z,
+      },
+    ];
+}
+
   disposeDragControl() {
     if (this.controls) {
       const drag = this.controls.drag;
@@ -696,45 +733,13 @@ export default class ThreeControl {
             model.controlPointRim,
           ];
           this.objects.draggableObjects.push(model.controlPoint);
-          this.objects.dragConstraint[model.controlPoint.id.toString()] = [
-            {
-              key: "x",
-              min: model.bbox.minPos.x,
-              max: model.bbox.maxPos.x,
-            },
-            {
-              key: "y",
-              min: model.bbox.minPos.y,
-              max: model.bbox.maxPos.y,
-            },
-            {
-              key: "z",
-              min: model.bbox.minPos.z,
-              max: model.bbox.maxPos.z,
-            },
-          ];
+          this.updateDragConstraint(model)
         }
         if (this.options.displayControlLineZ) {
           this.sceneOverlay.add(model.controlLineZ);
           this.objects.draggableObjects.push(model.controlLineZ);
-          this.objects.dragConstraint[model.controlLineZ.id.toString()] = [
-            {
-              key: "x",
-              min: model.bbox.minPos.x,
-              max: model.bbox.maxPos.x,
-            },
-            {
-              key: "y",
-              min: model.bbox.minPos.y,
-              max: model.bbox.maxPos.y,
-            },
-            {
-              key: "z",
-              min: model.bbox.centerPos.z,
-              max: model.bbox.centerPos.z,
-            },
-          ];
         }
+        this.updateDragConstraint(model)
         if (this.options.displayControlPrimaryDirection) {
           this.sceneOverlay.add(model.controlPrimaryDirection);
         }
@@ -900,22 +905,23 @@ export default class ThreeControl {
     z: number | undefined,
     radius?: number
   ) {
-    if (!this.objects.loadedModels[0]) return;
+    const targetModel=this.objects.loadedModels[0]
+    if (!targetModel) return;
 
     if (
       typeof x === "undefined" ||
       typeof y === "undefined" ||
       typeof z === "undefined"
     ) {
-      this.objects.loadedModels[0].controlPoint.visible = false;
-      this.objects.loadedModels[0].controlPointRim.visible = false;
+      targetModel.controlPoint.visible = false;
+      targetModel.controlPointRim.visible = false;
     } else {
-      this.objects.loadedModels[0].controlPoint.visible = true;
-      this.objects.loadedModels[0].controlPointRim.visible = true;
-      this.objects.loadedModels[0].controlPoint.position.set(x, y, z);
-      this.objects.loadedModels[0].controlPointRim.position.set(x, y, z);
+      targetModel.controlPoint.visible = true;
+      targetModel.controlPointRim.visible = true;
+      targetModel.controlPoint.position.set(x, y, z);
+      targetModel.controlPointRim.position.set(x, y, z);
       if (typeof radius !== "undefined")
-        this.objects.loadedModels[0].controlPoint.scale.set(
+        targetModel.controlPoint.scale.set(
           radius,
           radius,
           radius
@@ -1035,6 +1041,7 @@ export default class ThreeControl {
       targetModel.loadedMeshList.forEach((mesh: THREE.Mesh) => {
         mesh.position.add(targetModel.translation);
       });
+      this.updateDragConstraint(targetModel)
     }
   }
 

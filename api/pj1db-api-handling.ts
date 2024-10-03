@@ -30,9 +30,11 @@ type XYZ = {
   z: number;
 };
 
-type MetaInfo = {
-  size?: XYZ;
-  center?: XYZ;
+type ModelCalcInfo = {
+  commonModel: {
+    size: XYZ;
+    center: XYZ;
+  };
 };
 
 export type Direction = {
@@ -86,22 +88,22 @@ export type FindInstancesResponse = {
 
 export type FindModelResponse = {
   modelId: string;
-  metaInfo: MetaInfo;
+  metaInfo: ModelCalcInfo;
   status: ModelStatusInfo;
   gravityWithDirections: GravityWithThumbnail[];
   regionList: FrictionRegionInfo[];
   grasp2pList: Grasp2pInfo[];
   weight: number;
   url: {
-    glb:{
+    glb: {
       original: string[];
       common10k: string[];
       candidate?: string[];
-      stable?: string[];  
-    },
-    urdf_zip?:{
+      stable?: string[];
+    };
+    urdf_zip?: {
       common10k: string[];
-    }
+    };
   };
 };
 
@@ -251,21 +253,11 @@ export const handlingApi: Dict<FuncDef> = {
  */
 export const calcInitialGravityInfo = (
   gravity: GravityInfo | undefined,
-  rawCenter: XYZ | undefined,
   rawSize: XYZ | undefined
 ) => {
-  const xyz: ("x" | "y" | "z")[] = ["x", "y", "z"];
-
-  return {
+  const info = {
     centerDefault: [gravity?.center?.x, gravity?.center?.y, gravity?.center?.z],
-    centerMinMax: xyz.map((key) =>
-      !rawCenter || !rawSize
-        ? {}
-        : {
-            min: rawCenter[key] - rawSize[key] / 2,
-            max: rawCenter[key] + rawSize[key] / 2,
-          }
-    ),
+    centerMinMax: [{}, {}, {}],
     radiusDefault: gravity?.radius,
     radiusMinMax: {
       min: 0,
@@ -275,4 +267,14 @@ export const calcInitialGravityInfo = (
       min: 0,
     },
   };
+
+  if (rawSize) {
+    const maxSize = Math.max(rawSize.x, rawSize.y, rawSize.z);
+    const limitSize = Math.sqrt(3) * maxSize;
+    info.centerMinMax[0] = { min: -limitSize / 2, max: limitSize / 2 };
+    info.centerMinMax[1] = { min: -limitSize / 2, max: limitSize / 2 };
+    info.centerMinMax[2] = { min: 0, max: limitSize };
+  }
+
+  return info;
 };
