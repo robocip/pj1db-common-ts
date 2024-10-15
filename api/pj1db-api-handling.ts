@@ -158,8 +158,8 @@ type CalcFlag = {
 export type FindInstancesParam = {
   version: string | undefined;
   deleted: boolean;
-  queryAttr: string | undefined;
-  queryCalc: string | undefined;
+  queryAttr: object | undefined;
+  queryCalc: object | undefined;
   handlingSearchCondition: {
     candidate_region_flag: CalcFlag;
     stable_region_flag: CalcFlag;
