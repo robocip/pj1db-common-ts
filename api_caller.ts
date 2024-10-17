@@ -4,7 +4,7 @@
 
 import { API, Auth } from "aws-amplify";
 
-import { FuncDef ,Dict} from "./api/pj1db-api";
+import { FuncDef, Dict } from "./api/pj1db-api";
 
 export class ErrorInfo extends Error {
   errorCode: string;
@@ -149,7 +149,7 @@ function filterObject(
   inverse = false
 ): object | undefined {
   if (!obj) return undefined;
-  const filtered = Object.fromEntries(
+  let filtered = Object.fromEntries(
     inverse
       ? Object.entries(obj).filter(
           ([k, v]) =>
@@ -163,6 +163,14 @@ function filterObject(
             target.includes(k)
         )
   );
+  if (!omitKeyWhenValueUndefined) {
+    filtered = Object.fromEntries(
+      Object.entries(filtered).map(([k, v]) => [
+        k,
+        typeof v === "undefined" ? null : v,
+      ])
+    );
+  }
   return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
 
@@ -170,7 +178,7 @@ function filterObject(
     APIをコールします。
     argがundefinedの時、
     １）フィールドを省略する
-    ２）フィールドを残し値としてundefinedを設定する
+    ２）フィールドを残し値としてnullを設定する
     かはfuncDef.omitKeyWhenValueUndefinedで選べます。
     update系のAPI等において、フィールドのありなしで意味が異なる場合、
     例えば、１）がそのフィールドを更新しないことを意味し、２）がフィールドをunsetすることを意味する、
