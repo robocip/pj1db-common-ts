@@ -99,16 +99,14 @@ class BoundingBox {
     let maxY = -Number.MAX_VALUE;
     let maxZ = -Number.MAX_VALUE;
     meshList.forEach((mesh) => {
-      const bbox = mesh.geometry.boundingBox;
+      const bbox = new THREE.Box3().setFromObject(mesh, true);
       if (bbox) {
-        const posA = mesh.localToWorld(bbox.min);
-        const posB = mesh.localToWorld(bbox.max);
-        minX = Math.min(minX, posA.x, posB.x);
-        minY = Math.min(minY, posA.y, posB.y);
-        minZ = Math.min(minZ, posA.z, posB.z);
-        maxX = Math.max(maxX, posA.x, posB.x);
-        maxY = Math.max(maxY, posA.y, posB.y);
-        maxZ = Math.max(maxZ, posA.z, posB.z);
+        minX = Math.min(minX, bbox.min.x);
+        minY = Math.min(minY, bbox.min.y);
+        minZ = Math.min(minZ, bbox.min.z);
+        maxX = Math.max(maxX, bbox.max.x);
+        maxY = Math.max(maxY, bbox.max.y);
+        maxZ = Math.max(maxZ, bbox.max.z);
       } else {
         throw new Error("mesh has no bbox");
       }
@@ -123,14 +121,19 @@ class BoundingBox {
 class LoadedModel {
   scene: THREE.Group;
 
-  bbox: BoundingBox; // ロードしたモデルの１番目のメッシュのバウンディングボックス
+  rotation: THREE.Quaternion; // ロードしたモデルを表示前に回転させるquaternion
+
+  translation: THREE.Vector3; // ロードしたモデルを表示前に平行移動させるvector
+
+  bbox: BoundingBox; // ロードしたモデルの全メッシュのbbox。
+  // bboxはrotationの値で回転しtranslationの値で平行移動した後に測った値
 
   controlPoint: THREE.Mesh;
 
   controlPointRim: THREE.Mesh;
 
   controlLineZ: THREE.Mesh;
-  
+
   controlPrimaryDirection: THREE.Mesh;
 
   controlSecondaryDirection: THREE.Mesh;
@@ -150,17 +153,19 @@ class LoadedModel {
     if (this.loadedMeshList.length === 0) {
       throw Error("no mesh");
     }
-    // correct boundingbox is available after render()
-    this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
-    [this.controlPoint, this.controlPointRim] = this._createControlPoint();
-    this.controlLineZ = this._createControlLineZ();
-    this.controlPrimaryDirection = this._createControlPrimaryDirection();
-    this.controlSecondaryDirection = this._createControlSecondaryDirection();
     this.loadedMeshList.forEach((mesh) => {
       // it is needed for Raycast to calc intersection of mesh
       mesh.geometry.computeBoundingBox();
       mesh.geometry.computeBoundingSphere();
     });
+    // correct boundingbox is available after render()
+    this.rotation = new THREE.Quaternion();
+    this.translation = new THREE.Vector3();
+    this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
+    [this.controlPoint, this.controlPointRim] = this._createControlPoint();
+    this.controlLineZ = this._createControlLineZ();
+    this.controlPrimaryDirection = this._createControlPrimaryDirection();
+    this.controlSecondaryDirection = this._createControlSecondaryDirection();
   }
 
   get maxXY() {
@@ -170,6 +175,11 @@ class LoadedModel {
       Math.abs(this.bbox.maxPos.x),
       Math.abs(this.bbox.maxPos.y)
     );
+  }
+
+  update_bbox() {
+    this.bbox = BoundingBox.fromMeshList(this.loadedMeshList);
+    console.log("bbox updated", this.bbox);
   }
 
   _createControlPoint() {
@@ -186,7 +196,7 @@ class LoadedModel {
       this.bbox.centerPos.y,
       this.bbox.centerPos.z
     );
-    centerMesh.name="controlPointCenter"
+    centerMesh.name = "controlPointCenter";
 
     const rimMesh = new THREE.Mesh(
       new THREE.SphereGeometry(1),
@@ -202,7 +212,7 @@ class LoadedModel {
       this.bbox.centerPos.z
     );
     rimMesh.scale.set(0, 0, 0);
-    rimMesh.name="controlPointRim"
+    rimMesh.name = "controlPointRim";
 
     return [centerMesh, rimMesh];
   }
@@ -218,14 +228,14 @@ class LoadedModel {
         opacity: 0.5,
       })
     );
-    mesh.name="controlLineZ"
+    mesh.name = "controlLineZ";
     mesh.rotation.set(Math.PI / 2, 0, 0);
     mesh.position.x = this.bbox.centerPos.x;
     mesh.position.y = this.bbox.centerPos.y;
     mesh.position.z = this.bbox.centerPos.z;
     return mesh;
   }
-  
+
   _createControlPrimaryDirection() {
     // 初期値はz軸
     return this._createControlDirection(CONTROL_PRIMARY_DIRECTION_COLOR, "z");
@@ -596,7 +606,44 @@ export default class ThreeControl {
     this.sceneOverlay.add(new THREE.AmbientLight(0x222222));
   }
 
-  disposeDragControl(){
+  updateDragConstraint(model:LoadedModel){
+    this.objects.dragConstraint[model.controlPoint.id.toString()] = [
+      {
+        key: "x",
+        min: model.bbox.minPos.x,
+        max: model.bbox.maxPos.x,
+      },
+      {
+        key: "y",
+        min: model.bbox.minPos.y,
+        max: model.bbox.maxPos.y,
+      },
+      {
+        key: "z",
+        min: model.bbox.minPos.z,
+        max: model.bbox.maxPos.z,
+      },
+    ];
+    this.objects.dragConstraint[model.controlLineZ.id.toString()] = [
+      {
+        key: "x",
+        min: model.bbox.minPos.x,
+        max: model.bbox.maxPos.x,
+      },
+      {
+        key: "y",
+        min: model.bbox.minPos.y,
+        max: model.bbox.maxPos.y,
+      },
+      {
+        key: "z",
+        min: model.bbox.centerPos.z,
+        max: model.bbox.centerPos.z,
+      },
+    ];
+}
+
+  disposeDragControl() {
     if (this.controls) {
       const drag = this.controls.drag;
       drag.removeEventListener("dragstart", this.listener.onDragStart);
@@ -606,7 +653,7 @@ export default class ThreeControl {
     }
   }
 
-  disposeOrbitControl(){
+  disposeOrbitControl() {
     if (this.controls) {
       const orbit = this.controls.orbit;
       if (this.listener.onOrbitChange) {
@@ -620,8 +667,8 @@ export default class ThreeControl {
     window.removeEventListener("pointermove", this.listener.onPointerMove);
     window.removeEventListener("mousedown", this.listener.onMouseDown);
     window.removeEventListener("mouseup", this.listener.onMouseUp);
-    this.disposeDragControl()
-    this.disposeOrbitControl()
+    this.disposeDragControl();
+    this.disposeOrbitControl();
 
     const elem = document.getElementById(this.parentDomId);
     if (elem && this.renderer.domElement.parentElement === elem)
@@ -686,45 +733,13 @@ export default class ThreeControl {
             model.controlPointRim,
           ];
           this.objects.draggableObjects.push(model.controlPoint);
-          this.objects.dragConstraint[model.controlPoint.id.toString()] = [
-            {
-              key: "x",
-              min: model.bbox.minPos.x,
-              max: model.bbox.maxPos.x,
-            },
-            {
-              key: "y",
-              min: model.bbox.minPos.y,
-              max: model.bbox.maxPos.y,
-            },
-            {
-              key: "z",
-              min: model.bbox.minPos.z,
-              max: model.bbox.maxPos.z,
-            },
-          ];
+          this.updateDragConstraint(model)
         }
         if (this.options.displayControlLineZ) {
           this.sceneOverlay.add(model.controlLineZ);
           this.objects.draggableObjects.push(model.controlLineZ);
-          this.objects.dragConstraint[model.controlLineZ.id.toString()] = [
-            {
-              key: "x",
-              min: model.bbox.minPos.x,
-              max: model.bbox.maxPos.x,
-            },
-            {
-              key: "y",
-              min: model.bbox.minPos.y,
-              max: model.bbox.maxPos.y,
-            },
-            {
-              key: "z",
-              min: model.bbox.centerPos.z,
-              max: model.bbox.centerPos.z,
-            },
-          ];
         }
+        this.updateDragConstraint(model)
         if (this.options.displayControlPrimaryDirection) {
           this.sceneOverlay.add(model.controlPrimaryDirection);
         }
@@ -732,14 +747,17 @@ export default class ThreeControl {
           this.sceneOverlay.add(model.controlSecondaryDirection);
         }
 
-        const drag = this._createDragControl(this.controls.camera, this.controls.drag);
-        this.resetDragControl(drag) // needed for reflecting this.objects.draggableObjects
+        const drag = this._createDragControl(
+          this.controls.camera,
+          this.controls.drag
+        );
+        this.resetDragControl(drag); // needed for reflecting this.objects.draggableObjects
 
         this.objects.loadedModels.push(model);
-        if(this.options.objectSelectable){
-          const filtered=model.loadedMeshList.filter(
-            (mesh)=>!this.options.exceptObjectSelection.includes(mesh.name)
-          )
+        if (this.options.objectSelectable) {
+          const filtered = model.loadedMeshList.filter(
+            (mesh) => !this.options.exceptObjectSelection.includes(mesh.name)
+          );
           this.objects.selectableObjects.push(...filtered);
         }
         model.adjustCamera(this.controls.camera, this.lookAtPosition);
@@ -855,19 +873,19 @@ export default class ThreeControl {
           0.5 / (d * Math.tan(((CAMERA_FOV / 2) * Math.PI) / 180));
         newCamera.updateProjectionMatrix();
       }
-      this.resetControls(controls)
+      this.resetControls(controls);
       this._render(); // rendering after moving camera
     }
   }
 
-  resetControls(controls:ThreeControls){
-    this.disposeDragControl()
-    this.disposeOrbitControl()
+  resetControls(controls: ThreeControls) {
+    this.disposeDragControl();
+    this.disposeOrbitControl();
     this.controls = controls;
   }
 
-  resetDragControl(drag:DragControls){
-    this.disposeDragControl()
+  resetDragControl(drag: DragControls) {
+    this.disposeDragControl();
     this.controls.drag = drag;
   }
 
@@ -887,22 +905,23 @@ export default class ThreeControl {
     z: number | undefined,
     radius?: number
   ) {
-    if (!this.objects.loadedModels[0]) return;
+    const targetModel=this.objects.loadedModels[0]
+    if (!targetModel) return;
 
     if (
       typeof x === "undefined" ||
       typeof y === "undefined" ||
       typeof z === "undefined"
     ) {
-      this.objects.loadedModels[0].controlPoint.visible = false;
-      this.objects.loadedModels[0].controlPointRim.visible = false;
+      targetModel.controlPoint.visible = false;
+      targetModel.controlPointRim.visible = false;
     } else {
-      this.objects.loadedModels[0].controlPoint.visible = true;
-      this.objects.loadedModels[0].controlPointRim.visible = true;
-      this.objects.loadedModels[0].controlPoint.position.set(x, y, z);
-      this.objects.loadedModels[0].controlPointRim.position.set(x, y, z);
+      targetModel.controlPoint.visible = true;
+      targetModel.controlPointRim.visible = true;
+      targetModel.controlPoint.position.set(x, y, z);
+      targetModel.controlPointRim.position.set(x, y, z);
       if (typeof radius !== "undefined")
-        this.objects.loadedModels[0].controlPoint.scale.set(
+        targetModel.controlPoint.scale.set(
           radius,
           radius,
           radius
@@ -910,9 +929,7 @@ export default class ThreeControl {
     }
   }
 
-  setControlPointRimRadius(
-    radius: number
-  ) {
+  setControlPointRimRadius(radius: number) {
     if (!this.objects.loadedModels[0]) return;
     this.objects.loadedModels[0].controlPointRim.scale.set(
       radius,
@@ -921,8 +938,7 @@ export default class ThreeControl {
     );
   }
 
-
-  setControlLineZ(x: number | undefined, y: number | undefined):void {
+  setControlLineZ(x: number | undefined, y: number | undefined): void {
     if (!this.objects.loadedModels[0]) return;
 
     if (typeof x === "undefined" || typeof y === "undefined") {
@@ -1000,7 +1016,51 @@ export default class ThreeControl {
     this.objects.selectedObject = selectedObject;
   }
 
-  _createOrbitControl(camera: THREE.Camera, oldControl?: OrbitControls):OrbitControls {
+  setStandingDirection(theta_rad: number, phi_rad: number) {
+    /**
+     * objectを指定方向が上を向くように回転し、かつz最小の点がxy平面にくるよう平行移動します
+     */
+    const targetModel = this.objects.loadedModels[0];
+    if (targetModel.loadedMeshList) {
+      const q = new THREE.Quaternion();
+      q.setFromUnitVectors(
+        new THREE.Vector3(
+          Math.cos(phi_rad) * Math.sin(theta_rad),
+          Math.sin(phi_rad) * Math.sin(theta_rad),
+          Math.cos(theta_rad)
+        ),
+        new THREE.Vector3(0, 0, 1)
+      );
+      targetModel.rotation = q;
+      targetModel.loadedMeshList.forEach((mesh: THREE.Mesh) => {
+        mesh.rotation.setFromQuaternion(q);
+      });
+      targetModel.update_bbox();
+      const minZ = targetModel.bbox.minPos.z;
+      targetModel.translation = new THREE.Vector3(0, 0, -minZ);
+      targetModel.loadedMeshList.forEach((mesh: THREE.Mesh) => {
+        mesh.position.add(targetModel.translation);
+      });
+      this.updateDragConstraint(targetModel)
+    }
+  }
+
+  setTranslation(x: number, y: number, z: number) {
+    this.objects.loadedModels[0].loadedMeshList.forEach((mesh: THREE.Mesh) => {
+      mesh.position.set(x, y, z);
+    });
+  }
+
+  setRotation(x: number, y: number, z: number) {
+    this.objects.loadedModels[0].loadedMeshList.forEach((mesh: THREE.Mesh) => {
+      mesh.rotation.set(x, y, z, "XYZ");
+    });
+  }
+
+  _createOrbitControl(
+    camera: THREE.Camera,
+    oldControl?: OrbitControls
+  ): OrbitControls {
     const orbit = new OrbitControls(camera, this.renderer.domElement);
     orbit.autoRotate = this.options.autoRotate;
     orbit.enablePan = false;
@@ -1013,7 +1073,10 @@ export default class ThreeControl {
     return orbit;
   }
 
-  _createDragControl(camera: THREE.Camera, oldControl?: DragControls):DragControls {
+  _createDragControl(
+    camera: THREE.Camera,
+    oldControl?: DragControls
+  ): DragControls {
     const drag = new DragControls(
       this.objects.draggableObjects,
       camera,
@@ -1030,7 +1093,7 @@ export default class ThreeControl {
     return drag;
   }
 
-  _createCameraAndControls():ThreeControls {
+  _createCameraAndControls(): ThreeControls {
     console.log("create camera: useOrthoCamera=", this.options.useOrthoCamera);
     const camera = this.options.useOrthoCamera
       ? new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1000, 1000)
