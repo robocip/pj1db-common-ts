@@ -20,6 +20,7 @@ interface Props {
   options?: OptionsView3D;
   padding?: number;
   callbacks?: Callbacks;
+  setLoadError?: (loadError: boolean) => void;
 }
 
 const VIEW_SIZE = 512;
@@ -111,7 +112,7 @@ export default function View3D(props: Props) {
       onObjectHover: (objectList: THREE.Object3D[]) => {
         onObjectHover(objectList);
       },
-    });
+    }, props.setLoadError);
     props.three.setControl(control);
     return control.getUnmountFunc();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,8 +187,8 @@ export default function View3D(props: Props) {
                 !selectedObject
                   ? ""
                   : selectedObject.name
-                  ? selectedObject.name
-                  : "(no name)"
+                    ? selectedObject.name
+                    : "(no name)"
               }
             </span>
           </div>
@@ -237,7 +238,7 @@ export default function View3D(props: Props) {
           </RadioGroupField>
         )}
         {!props.showGridSizeControl ||
-        !props.three.control?.options.displayGrid ? undefined : (
+          !props.three.control?.options.displayGrid ? undefined : (
           <RadioGroupField
             padding={props.padding}
             label="GridSize"
@@ -302,4 +303,5 @@ View3D.defaultProps = {
   options: {},
   padding: 5,
   callbacks: undefined,
+  setLoadError: undefined
 };

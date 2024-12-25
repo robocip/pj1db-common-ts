@@ -336,11 +336,11 @@ class LoadedModel {
 
     camera.position.set(
       lookAtPosition.x +
-        centerToCameraRatio * maxDirection * vecDict[viewpointType].x,
+      centerToCameraRatio * maxDirection * vecDict[viewpointType].x,
       lookAtPosition.y +
-        centerToCameraRatio * maxDirection * vecDict[viewpointType].y,
+      centerToCameraRatio * maxDirection * vecDict[viewpointType].y,
       lookAtPosition.z +
-        centerToCameraRatio * maxDirection * vecDict[viewpointType].z
+      centerToCameraRatio * maxDirection * vecDict[viewpointType].z
     );
 
     if (camera instanceof THREE.OrthographicCamera) {
@@ -427,6 +427,8 @@ export default class ThreeControl {
 
   dragging = false;
 
+  setLoadError?: (loadError: boolean) => void
+
   listener: {
     onPointerMove: (event: PointerEvent) => void;
     onMouseDown: (event: MouseEvent) => void;
@@ -448,14 +450,14 @@ export default class ThreeControl {
     selectableObjects: THREE.Object3D[];
     selectedObject: THREE.Object3D | undefined;
   } = {
-    dragConstraint: {},
-    dragInterlock: {},
-    loadedModels: [],
-    meshes: [],
-    draggableObjects: [],
-    selectableObjects: [],
-    selectedObject: undefined,
-  };
+      dragConstraint: {},
+      dragInterlock: {},
+      loadedModels: [],
+      meshes: [],
+      draggableObjects: [],
+      selectableObjects: [],
+      selectedObject: undefined,
+    };
 
   options: Options = DEFAULT_OPTION;
 
@@ -463,7 +465,8 @@ export default class ThreeControl {
     renderAreaSize: number,
     parentDomId: string,
     options: OptionsView3D = {},
-    callbacks: Callbacks = {}
+    callbacks: Callbacks = {},
+    setLoadError?: (loadError: boolean) => void
   ) {
     console.log("ThreeControl given options:");
     console.log(options);
@@ -472,6 +475,7 @@ export default class ThreeControl {
     console.log(this.options);
     this.parentDomId = parentDomId;
     this.callbacks = callbacks;
+    this.setLoadError = setLoadError
 
     this.listener = {
       onPointerMove: (event: PointerEvent) => {
@@ -572,15 +576,15 @@ export default class ThreeControl {
       onOrbitChange: !callbacks.onOrbitChange
         ? undefined
         : (event: any) => {
-            if (callbacks.onOrbitChange) {
-              callbacks.onOrbitChange(
-                this.controls.camera.position.toArray(),
-                this.controls.camera instanceof THREE.OrthographicCamera
-                  ? this.controls.camera.zoom
-                  : undefined
-              );
-            }
-          },
+          if (callbacks.onOrbitChange) {
+            callbacks.onOrbitChange(
+              this.controls.camera.position.toArray(),
+              this.controls.camera instanceof THREE.OrthographicCamera
+                ? this.controls.camera.zoom
+                : undefined
+            );
+          }
+        },
     };
     window.addEventListener("pointermove", this.listener.onPointerMove);
     window.addEventListener("mousedown", this.listener.onMouseDown);
@@ -606,7 +610,7 @@ export default class ThreeControl {
     this.sceneOverlay.add(new THREE.AmbientLight(0x222222));
   }
 
-  updateDragConstraint(model:LoadedModel){
+  updateDragConstraint(model: LoadedModel) {
     this.objects.dragConstraint[model.controlPoint.id.toString()] = [
       {
         key: "x",
@@ -641,7 +645,7 @@ export default class ThreeControl {
         max: model.bbox.centerPos.z,
       },
     ];
-}
+  }
 
   disposeDragControl() {
     if (this.controls) {
@@ -772,6 +776,8 @@ export default class ThreeControl {
         console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
       },
       (error: ErrorEvent) => {
+        if (this.setLoadError)
+          this.setLoadError(true)
         console.log(error);
         this._render();
       }
@@ -905,7 +911,7 @@ export default class ThreeControl {
     z: number | undefined,
     radius?: number
   ) {
-    const targetModel=this.objects.loadedModels[0]
+    const targetModel = this.objects.loadedModels[0]
     if (!targetModel) return;
 
     if (
@@ -1155,8 +1161,7 @@ export default class ThreeControl {
   _traceObjectTree(target: THREE.Object3D | undefined = undefined, depth = 0) {
     if (!target) target = this.scene;
     console.log(
-      `${"-".repeat(depth)}${target.constructor.name}(name=${target.name},id=${
-        target.id
+      `${"-".repeat(depth)}${target.constructor.name}(name=${target.name},id=${target.id
       })`
     );
     target?.children.forEach((child: THREE.Object3D) => {
@@ -1217,8 +1222,8 @@ export default class ThreeControl {
             ? 0x666666
             : obejectList[0] === obj &&
               (!this.options.supressHoverWhenDragging || !this.dragging)
-            ? 0x333333
-            : 0x000000
+              ? 0x333333
+              : 0x000000
         );
       }
     });
