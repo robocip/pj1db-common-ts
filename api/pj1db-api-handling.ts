@@ -69,15 +69,22 @@ export type FrictionRegionInfo = {
 };
 
 export type Grasp2pInfo = {
-  id: string;
   position: {
     center: number[];
     orientation: number[];
     radius: number;
     arc: number;
   };
-  force: number;
-  radius: number;
+  requiredForce: number;
+};
+
+export type Grasp2pInfoWithId = Grasp2pInfo & {
+  id: string;
+  idName: string;
+};
+
+export type Grasp2p = {
+  id: Grasp2pInfo[];
 };
 
 export type FindInstancesResponse = {
@@ -92,7 +99,7 @@ export type FindModelResponse = {
   status: ModelStatusInfo;
   gravityWithDirections: GravityWithThumbnail[];
   regionList: FrictionRegionInfo[];
-  grasp2pList: Grasp2pInfo[];
+  grasp2p: Grasp2p;
   weight: number;
   url: {
     glb: {
