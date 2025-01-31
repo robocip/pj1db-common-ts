@@ -769,6 +769,8 @@ export default class ThreeControl {
         this.setGridLimit(model.maxXY);
 
         if (onLoad) onLoad();
+        if (this.setLoadError)
+          this.setLoadError(false)
 
         this._render(); // rendering after moving camera
       },
