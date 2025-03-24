@@ -1,6 +1,11 @@
 # pj1db-common-ts
 Webアプリ実装時に共通で使用するtype scriptのutilコード
 
+## 使い方
+
+- このutilは他のレポジトリ中でsubmoduleとして取り込んで利用することを想定している。utilを利用したいレポジトリにおいて、適当フォルダ配下に`git submodule`コマンドでコードを取り込み使用すること。
+
+## 依存先パッケージ
 下記の依存があります。
 
 - dependency
