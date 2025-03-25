@@ -1,10 +1,10 @@
 import { Dict, FuncDef } from "./pj1db-api";
-
+ 
 // --------------------------------------------------------------------------------------
 /**
  * handling APIのレスポンス型の定義
  */
-
+ 
 type RegionState =
   | "notcalculated"
   | "calculating"
@@ -12,48 +12,48 @@ type RegionState =
   | "recalculating"
   | "notcalculatedError"
   | "calculatedError";
-
+ 
 type AttrStatus = "set" | "notset";
-
+ 
 type CalcStatus =
   | "not_calc"
   | "queued_calc"
   | "calculating"
   | "calculated"
   | "error";
-
+ 
 type UrdfStatus = "created" | "notcreated";
-
+ 
 type XYZ = {
   x: number;
   y: number;
   z: number;
 };
-
+ 
 type ModelCalcInfo = {
   commonModel: {
     size: XYZ;
     center: XYZ;
   };
 };
-
+ 
 export type Direction = {
   theta: number;
   phi: number;
 };
-
+ 
 export type GravityWithThumbnail = {
   thumbnail: string;
   gravity: GravityInfo;
 };
-
+ 
 export type GravityInfo = {
   center?: Partial<XYZ>;
   radius?: number;
   weight?: number;
   standingDirection: Direction;
 };
-
+ 
 export type ModelStatusInfo = {
   gravity: AttrStatus;
   friction: AttrStatus;
@@ -61,13 +61,14 @@ export type ModelStatusInfo = {
   grasp2p: RegionState;
   urdf_zip: UrdfStatus;
 };
-
+ 
 export type FrictionRegionInfo = {
   id: string;
   meshCount: number;
   friction: number | undefined;
+  requiredforcewidth: number | undefined;
 };
-
+ 
 export type Grasp2pInfo = {
   position: {
     center: number[];
@@ -77,22 +78,22 @@ export type Grasp2pInfo = {
   };
   requiredForce: number;
 };
-
+ 
 export type Grasp2pInfoWithId = Grasp2pInfo & {
   id: string;
   idName: string;
 };
-
+ 
 export type Grasp2p = {
   id: Grasp2pInfo[];
 };
-
+ 
 export type FindInstancesResponse = {
   [instanceId: string]: {
     thumbnail_list: string[];
   };
 };
-
+ 
 export type FindModelResponse = {
   modelId: string;
   metaInfo: ModelCalcInfo;
@@ -113,46 +114,50 @@ export type FindModelResponse = {
     };
   };
 };
-
+ 
 export type CalcStablePollResponse = {
   result: string;
 };
-
+ 
 export type CalcBulkCandidateResponse = {
   count: number;
 };
-
+ 
 export type CalcBulkCandidatePollResponse = {
   count_in_progress: number;
 };
-
+ 
 export type CalcIndivCandidateResponse = {
   count: number;
 };
-
+ 
 export type CalcIndivCandidatePollResponse = {
   region: RegionState;
   calc: CalcStatus;
 };
-
+ 
 export type WriteFrictionResponse = {
   queueCalcStable: string;
 };
-
+ 
+export type WriteRequiredForceWidthResponse = {
+  queueCalcStable: string;
+};
+ 
 export type WriteGravityResponse = {
   queueCalcStable: string;
 };
-
+ 
 // --------------------------------------------------------------------------------------
 /**
  * handling APIのリクエストパラメータ型の定義
  */
-
+ 
 type AttrFlag = {
   notset: boolean;
   set: boolean;
 };
-
+ 
 type CalcFlag = {
   notcalculated: boolean;
   calculating: boolean;
@@ -161,7 +166,7 @@ type CalcFlag = {
   notcalculatedError: boolean;
   calculatedError: boolean;
 };
-
+ 
 export type FindInstancesParam = {
   version: string | undefined;
   deleted: boolean;
@@ -174,43 +179,49 @@ export type FindInstancesParam = {
     gravity_info_flag: AttrFlag;
   };
 };
-
+ 
 export type FindModelParam = {
   instanceId: string;
 };
-
+ 
 export type CalcStablePollParam = {
   modelId: string;
 };
-
+ 
 export type CalcBulkCandidateParam = {
   instanceIds: string[];
 };
-
+ 
 export type CalcBulkCandidatePollParam = {
   instanceIds: string[];
 };
-
+ 
 export type CalcIndivCandidateParam = {
   modelId: string;
 };
-
+ 
 export type CalcIndivCandidatePollParam = {
   modelId: string;
 };
-
+ 
 export type WriteFrictionParam = {
   modelId: string;
   friction: Dict<number | undefined>;
   creator: string;
 };
-
+ 
+export type WriteRequiredForceWidthParam = {
+  modelId: string;
+  requiredforcewidth: Dict<number | undefined>;
+  creator: string;
+};
+ 
 export type WriteGravityParam = {
   modelId: string;
   gravity: GravityInfo;
   creator: string;
 };
-
+ 
 //--------------------------------------------------------------------------------------
 /**
  * handling APIの呼び出し仕様定義
@@ -253,7 +264,7 @@ export const handlingApi: Dict<FuncDef> = {
     name: "calcIndivCandidate_poll",
   },
 };
-
+ 
 //--------------------------------------------------------------------------------------
 /**
  * utility関数
@@ -274,7 +285,7 @@ export const calcInitialGravityInfo = (
       min: 0,
     },
   };
-
+ 
   if (rawSize) {
     const maxSize = Math.max(rawSize.x, rawSize.y, rawSize.z);
     const limitSize = Math.sqrt(3) * maxSize;
@@ -282,6 +293,6 @@ export const calcInitialGravityInfo = (
     info.centerMinMax[1] = { min: -limitSize / 2, max: limitSize / 2 };
     info.centerMinMax[2] = { min: 0, max: limitSize };
   }
-
+ 
   return info;
 };
