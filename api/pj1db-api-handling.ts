@@ -22,6 +22,8 @@ type CalcStatus =
   | "calculated"
   | "error";
 
+type GraspabilityStatus = "set" | "unset" | "error";
+
 type UrdfStatus = "created" | "notcreated";
 
 type XYZ = {
@@ -59,6 +61,7 @@ export type ModelStatusInfo = {
   friction: AttrStatus;
   region: RegionState;
   grasp2p: RegionState;
+  graspability: GraspabilityStatus;
   urdf_zip: UrdfStatus;
 };
 
@@ -87,6 +90,10 @@ export type Grasp2p = {
   id: Grasp2pInfo[];
 };
 
+export type Graspability = {
+  area: [number[]]; // todo: 人ならここ持つ領域関連 (型未定)
+};
+
 export type FindInstancesResponse = {
   [instanceId: string]: {
     thumbnail_list: string[];
@@ -100,6 +107,7 @@ export type FindModelResponse = {
   gravityWithDirections: GravityWithThumbnail[];
   regionList: FrictionRegionInfo[];
   grasp2p: Grasp2p;
+  graspability: Graspability;
   weight: number;
   url: {
     glb: {
