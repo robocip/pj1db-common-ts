@@ -2,6 +2,7 @@ import { Flex, RadioGroupField, Radio } from "@aws-amplify/ui-react";
 import { useState, useCallback, useEffect } from "react";
 import ThreeMeshControl, {
   OperationType,
+  SelectType,
 } from "utils/common/react/SelectMesh3D/SelectMeshUtil";
 import AxisIconBox from "utils/common/react/View3D/AxisIconBox";
 import { OptionsView3D, LookAtType, MaterialType } from "./SelectMeshUtil";
@@ -80,7 +81,7 @@ export default function SelectMesh3D({
   callbacks = undefined,
   setLoadError = undefined,
 }: Props) {
-  // console.log("SelectMesh3D render");  //todo: はずす
+  // console.log("SelectMesh3D render");  // todo:
 
   const [cameraPos, setCameraPos] = useState<number[]>([0, 0, 0]);
   const [cameraZoom, setCameraZoom] = useState<number | undefined>();
@@ -92,6 +93,7 @@ export default function SelectMesh3D({
   const onObjectHover = useCallback(
     (objectList: THREE.Object3D[]) => {
       if (objectList.length !== hoverObjectList.length) {
+        // todo:
         // console.log(
         //   `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
         // );
@@ -100,6 +102,7 @@ export default function SelectMesh3D({
         // eslint-disable-next-line no-restricted-syntax
         for (const obj of objectList) {
           if (!hoverObjectList.includes(obj)) {
+            // todo :
             // console.log(`View3D hover object changed ${obj.name}`);
             setHoverObjectList(objectList);
             break;
@@ -172,6 +175,9 @@ export default function SelectMesh3D({
   };
   const changeOperateType = (operationType: OperationType) => {
     if (three.control) three.control.setOperationType(operationType);
+  };
+  const changeDragType = (selectTyoe: SelectType) => {
+    if (three.control) three.control.setSelectType(selectTyoe);
   };
 
   return (
@@ -302,17 +308,28 @@ export default function SelectMesh3D({
             </ul>
           </Flex>
         )}
-        {/* todo: ここにオブジェクト操作関連を追加 */}
-        <RadioGroupField
-          padding={padding}
-          label="OperateMode"
-          name="OperateMode"
-          defaultValue="ObjectOperation"
-          onChange={(e) => changeOperateType(e.target.value as OperationType)}
-        >
-          <Radio value="ObjectOperation">オブジェクト操作</Radio>
-          <Radio value="MeshSelection">メッシュ選択操作</Radio>
-        </RadioGroupField>
+        <Flex direction="column">
+          <RadioGroupField
+            padding={padding}
+            label="OperateMode"
+            name="OperateMode"
+            defaultValue="ObjectOperation"
+            onChange={(e) => changeOperateType(e.target.value as OperationType)}
+          >
+            <Radio value="ObjectOperation">オブジェクト操作</Radio>
+            <Radio value="MeshSelection">メッシュ選択</Radio>
+          </RadioGroupField>
+          <RadioGroupField
+            padding={padding}
+            label="SelectMode"
+            name="SelectMode"
+            defaultValue="lasso"
+            onChange={(e) => changeDragType(e.target.value as SelectType)}
+          >
+            <Radio value="lasso">ラッソ選択</Radio>
+            <Radio value="rectangle">矩形選択</Radio>
+          </RadioGroupField>
+        </Flex>
       </Flex>
     </Flex>
   );

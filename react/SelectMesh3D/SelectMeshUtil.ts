@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { DragControls } from "three/examples/jsm/controls/DragControls";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { MeshBVH } from "three-mesh-bvh";
 
 const CAMERA_FOV = 50;
 const WIREFRAME_COLOR = 0x004444;
@@ -47,6 +48,8 @@ export type MaterialType = "wireframe" | "original" | "solid";
 export type ViewpointType = "xyz" | "x" | "y" | "z" | "-x" | "-y" | "-z";
 
 export type OperationType = "ObjectOperation" | "MeshSelection";
+
+export type SelectType = "lasso" | "rectangle";
 
 export type ConstraintType = {
   key: "x" | "y" | "z";
@@ -143,6 +146,8 @@ class LoadedModel {
 
   loadedOriginalMaterial: THREE.Material[];
 
+  selectMeshes: THREE.Mesh[] = [];
+
   constructor(gltf: GLTF) {
     console.log("LoadedModel construct");
     this.group = gltf.scene;
@@ -154,10 +159,29 @@ class LoadedModel {
     if (this.loadedMeshList.length === 0) {
       throw Error("no mesh");
     }
+    // 選択したメッシュを補完する場所
     this.loadedMeshList.forEach((mesh, index) => {
       // it is needed for Raycast to calc intersection of mesh
       mesh.geometry.computeBoundingBox();
       mesh.geometry.computeBoundingSphere();
+
+      // @ts-ignore // todo: バージョン上げれば解決するはず
+      mesh.geometry.boundsTree = new MeshBVH(mesh.geometry, {
+        lazyGeneration: false,
+      });
+
+      const selectMesh = new THREE.Mesh(
+        mesh.geometry.clone(),
+        new THREE.MeshBasicMaterial({
+          color: 0x9dcce5, // todo: 色どうする？
+          opacity: 0.05,
+          transparent: true,
+          depthWrite: false,
+        })
+      );
+      selectMesh.renderOrder = 1;
+      this.selectMeshes.push(selectMesh);
+      this.group.add(this.selectMeshes[index]);
     });
     // correct boundingbox is available after render()
     this.rotation = new THREE.Quaternion();
@@ -470,7 +494,25 @@ export default class ThreeMeshControl {
 
   selectAreaStartPointer = new THREE.Vector2();
 
+  tempVec0 = new THREE.Vector2();
+
+  tempVec1 = new THREE.Vector2();
+
+  tempVec2 = new THREE.Vector2();
+
   operationType: OperationType = "ObjectOperation";
+
+  selectType: SelectType = "lasso";
+
+  toScreenSpaceMatrix = new THREE.Matrix4();
+
+  boxPoints = new Array(8).fill(null).map(() => new THREE.Vector3());
+
+  boxLines = new Array(12).fill(null).map(() => new THREE.Line3());
+
+  lassoSegments: THREE.Line3[] = [];
+
+  perBoundsSegments: number[] = [];
 
   constructor(
     renderAreaSize: number,
@@ -497,11 +539,14 @@ export default class ThreeMeshControl {
         this.pointer.x = ((event.clientX - b.left) / renderAreaSize) * 2 - 1;
         this.pointer.y = -((event.clientY - b.top) / renderAreaSize) * 2 + 1;
         if (this.dragging && this.operationType === "MeshSelection")
-          this._selectAreaCorrdinatesUpdate(this.pointer.x, this.pointer.y);
+          this._selectAreaCorrdinatesUpdate(
+            event,
+            this.pointer.x,
+            this.pointer.y
+          );
       },
       onMouseDown: (event: MouseEvent) => {
         const b = this.renderer.domElement.getBoundingClientRect();
-
         this.selectAreaStartPointer.x =
           ((event.clientX - b.left) / renderAreaSize) * 2 - 1;
         this.selectAreaStartPointer.y =
@@ -590,7 +635,7 @@ export default class ThreeMeshControl {
           obj.material instanceof THREE.MeshStandardMaterial &&
           obj.material.emissive
         ) {
-          obj.material.emissive.set(0x000000);
+          obj.material.emissive.set(0xffffff);
         }
         if (
           obj.id === this.objects.loadedModels[0].controlPoint.id &&
@@ -636,7 +681,7 @@ export default class ThreeMeshControl {
     this.scene.add(new THREE.AmbientLight(0x222222, 10));
     this.sceneOverlay.add(new THREE.AmbientLight(0x222222));
 
-    // 選択領域の描画
+    // 選択領域の描画の設定
     this.selectArea = new THREE.Line(
       new THREE.BufferGeometry(),
       new THREE.LineBasicMaterial({
@@ -814,8 +859,7 @@ export default class ThreeMeshControl {
         this._render(); // rendering after moving camera
       },
       (xhr) => {
-        // todo: 邪魔だから一時コメントアウト
-        // console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
+        console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
       },
       (error: ErrorEvent) => {
         if (this.setLoadError) this.setLoadError(true);
@@ -908,6 +952,10 @@ export default class ThreeMeshControl {
       this.controls.orbit.enableRotate = true;
       this.controls.orbit.enableZoom = true;
     }
+  }
+
+  setSelectType(selectType: SelectType) {
+    this.selectType = selectType;
   }
 
   setCameraType(useOrthoCamera: boolean) {
@@ -1243,10 +1291,24 @@ export default class ThreeMeshControl {
         this.callbacks.onObjectHover(obejectList);
     }
 
-    this.selectArea.geometry.setAttribute(
-      "position",
-      new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
-    );
+    if (this.selectType === "lasso") {
+      const ogLength = this.selectAreaCoordinates.length;
+      this.selectAreaCoordinates.push(
+        this.selectAreaCoordinates[0],
+        this.selectAreaCoordinates[1],
+        this.selectAreaCoordinates[2]
+      );
+      this.selectArea.geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
+      );
+      this.selectAreaCoordinates.length = ogLength;
+    } else if (this.selectType === "rectangle") {
+      this.selectArea.geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
+      );
+    }
     this.selectArea.frustumCulled = false;
 
     if (this.controls.camera instanceof THREE.PerspectiveCamera) {
@@ -1272,7 +1334,7 @@ export default class ThreeMeshControl {
 
     if (this.selectAreaUpdate) this.selectAreaUpdate = false;
     if (this.selectAreaCoordinates.length > 0) {
-      // 選択領域存在する場合、メッシュをハイライトさせる
+      // 選択領域が存在する場合、メッシュをハイライトさせる
       this._selectMeshHighlight();
     }
 
@@ -1283,36 +1345,265 @@ export default class ThreeMeshControl {
     this.renderer.render(this.sceneOverlay, this.controls.camera);
   }
 
-  _selectAreaCorrdinatesUpdate(currentX: number, currentY: number) {
-    this.selectAreaCoordinates.length = 3 * 5;
+  _selectAreaCorrdinatesUpdate(
+    e: PointerEvent,
+    currentX: number,
+    currentY: number
+  ) {
+    if (this.selectType === "lasso") {
+      const i = this.selectAreaCoordinates.length / 3 - 1;
+      const i3 = i * 3;
+      let doReplace = false;
+      if (this.selectAreaCoordinates.length > 3) {
+        this.tempVec0.set(
+          this.selectAreaCoordinates[i3 - 3],
+          this.selectAreaCoordinates[i3 - 3 + 1]
+        );
+        this.tempVec1.set(
+          this.selectAreaCoordinates[i3],
+          this.selectAreaCoordinates[i3 + 1]
+        );
+        this.tempVec1.sub(this.tempVec0).normalize();
 
-    this.selectAreaCoordinates[0] = this.selectAreaStartPointer.x;
-    this.selectAreaCoordinates[1] = this.selectAreaStartPointer.y;
-    this.selectAreaCoordinates[2] = 0;
+        this.tempVec0.set(
+          this.selectAreaCoordinates[i3],
+          this.selectAreaCoordinates[i3 + 1]
+        );
+        this.tempVec2.set(currentX, currentY);
+        this.tempVec2.sub(this.tempVec0).normalize();
 
-    this.selectAreaCoordinates[3] = currentX;
-    this.selectAreaCoordinates[4] = this.selectAreaStartPointer.y;
-    this.selectAreaCoordinates[5] = 0;
+        const dot = this.tempVec1.dot(this.tempVec2);
+        doReplace = dot > 0.99;
+      }
 
-    this.selectAreaCoordinates[6] = currentX;
-    this.selectAreaCoordinates[7] = currentY;
-    this.selectAreaCoordinates[8] = 0;
+      if (doReplace) {
+        this.selectAreaCoordinates[i3] = currentX;
+        this.selectAreaCoordinates[i3 + 1] = currentY;
+      } else {
+        this.selectAreaCoordinates.push(currentX, currentY, 0);
+      }
+    } else if (this.selectType === "rectangle") {
+      this.selectAreaCoordinates.length = 3 * 5;
 
-    this.selectAreaCoordinates[9] = this.selectAreaStartPointer.x;
-    this.selectAreaCoordinates[10] = currentY;
-    this.selectAreaCoordinates[11] = 0;
+      this.selectAreaCoordinates[0] = this.selectAreaStartPointer.x;
+      this.selectAreaCoordinates[1] = this.selectAreaStartPointer.y;
+      this.selectAreaCoordinates[2] = 0;
 
-    this.selectAreaCoordinates[12] = this.selectAreaStartPointer.x;
-    this.selectAreaCoordinates[13] = this.selectAreaStartPointer.y;
-    this.selectAreaCoordinates[14] = 0;
+      this.selectAreaCoordinates[3] = currentX;
+      this.selectAreaCoordinates[4] = this.selectAreaStartPointer.y;
+      this.selectAreaCoordinates[5] = 0;
 
+      this.selectAreaCoordinates[6] = currentX;
+      this.selectAreaCoordinates[7] = currentY;
+      this.selectAreaCoordinates[8] = 0;
+
+      this.selectAreaCoordinates[9] = this.selectAreaStartPointer.x;
+      this.selectAreaCoordinates[10] = currentY;
+      this.selectAreaCoordinates[11] = 0;
+
+      this.selectAreaCoordinates[12] = this.selectAreaStartPointer.x;
+      this.selectAreaCoordinates[13] = this.selectAreaStartPointer.y;
+      this.selectAreaCoordinates[14] = 0;
+    }
     this.selectArea.visible = true;
     this.selectAreaUpdate = true;
   }
 
   _selectMeshHighlight() {
     this.objects.loadedModels.forEach((model) => {
-      // todo: ここでメッシュの選択領域をハイライトする
+      model.loadedMeshList.forEach((mesh, index) => {
+        this.toScreenSpaceMatrix
+          .copy(mesh.matrixWorld)
+          .premultiply(this.controls.camera.matrixWorldInverse)
+          .premultiply(this.controls.camera.projectionMatrix);
+        while (this.lassoSegments.length < this.selectAreaCoordinates.length) {
+          this.lassoSegments.push(new THREE.Line3());
+        }
+        this.lassoSegments.length = this.selectAreaCoordinates.length;
+
+        for (let s = 0, l = this.selectAreaCoordinates.length; s < l; s += 3) {
+          const line = this.lassoSegments[s];
+          const sNext = (s + 3) % l;
+          line.start.x = this.selectAreaCoordinates[s];
+          line.start.y = this.selectAreaCoordinates[s + 1];
+
+          line.end.x = this.selectAreaCoordinates[sNext];
+          line.end.y = this.selectAreaCoordinates[sNext + 1];
+        }
+        const indices: number[] = [];
+
+        // @ts-ignore // todo: バージョン上げれば解決するはず
+        mesh.geometry.boundsTree.shapecast(
+          mesh,
+          // todo: 型見つける
+          (box: any, isLeaf: any, score: any, depth: any) => {
+            return 1; // todo: BoundsTree 使うならここ
+          },
+          (
+            tri: any,
+            a: number,
+            b: number,
+            c: number,
+            contained: any,
+            depth: any
+          ) => {
+            const selectModel = true; // todo: ?
+            if (contained) {
+              indices.push(a, b, c);
+              return selectModel;
+            }
+
+            const segmentsToCheck = this.lassoSegments; // this.perBoundsSegments[depth]
+            const vertices = [tri.a, tri.b, tri.c];
+
+            for (let j = 0; j < 3; j++) {
+              const v = vertices[j];
+              v.applyMatrix4(this.toScreenSpaceMatrix);
+
+              const crossings = this.pointRayCrossesSegments(
+                v,
+                segmentsToCheck
+              );
+              if (crossings % 2 === 1) {
+                indices.push(a, b, c);
+                return selectModel;
+              }
+            }
+
+            const lines = [
+              this.boxLines[0],
+              this.boxLines[1],
+              this.boxLines[2],
+            ];
+
+            lines[0].start.copy(tri.a);
+            lines[0].end.copy(tri.b);
+
+            lines[1].start.copy(tri.b);
+            lines[1].end.copy(tri.c);
+
+            lines[2].start.copy(tri.c);
+            lines[2].end.copy(tri.a);
+
+            for (let i = 0; i < 3; i++) {
+              const l = lines[i];
+              for (let s = 0, sl = segmentsToCheck.length; s < sl; s++) {
+                if (this.lineCrossesLine(l, segmentsToCheck[s])) {
+                  indices.push(a, b, c);
+                  return selectModel;
+                }
+              }
+            }
+
+            return false;
+          }
+        );
+
+        const indexAttr = mesh.geometry.index;
+        const newIndexAttr = model.selectMeshes[index].geometry.index;
+        if (indexAttr && newIndexAttr) {
+          if (indices.length) {
+            // if we found indices and we want to select the whole model
+            for (let i = 0, l = indexAttr.count; i < l; i++) {
+              const i2 = indexAttr.getX(i);
+              newIndexAttr.setX(i, i2);
+            }
+
+            model.selectMeshes[index].geometry.drawRange.count = Infinity;
+            newIndexAttr.needsUpdate = true;
+          } else {
+            // update the highlight mesh
+            for (let i = 0, l = indices.length; i < l; i++) {
+              const i2 = indexAttr.getX(indices[i]);
+              newIndexAttr.setX(i, i2);
+            }
+
+            model.selectMeshes[index].geometry.drawRange.count = indices.length;
+            newIndexAttr.needsUpdate = true;
+          }
+        }
+        //
+      });
     });
   }
+
+  pointRayCrossesSegments(point: any, segments: THREE.Line3[]) {
+    let crossings = 0;
+    const firstSeg = segments[segments.length - 1];
+    let prevDirection = firstSeg.start.y > firstSeg.end.y;
+    for (let s = 0, l = segments.length; s < l; s++) {
+      const line = segments[s];
+      const thisDirection = line.start.y > line.end.y;
+      if (this.pointRayCrossesLine(point, line, prevDirection, thisDirection)) {
+        crossings++;
+      }
+
+      prevDirection = thisDirection;
+    }
+
+    return crossings;
+  }
+
+  pointRayCrossesLine(
+    point: any,
+    line: any,
+    prevDirection: any,
+    thisDirection: any
+  ) {
+    const { start, end } = line;
+    const px = point.x;
+    const py = point.y;
+
+    const sy = start.y;
+    const ey = end.y;
+
+    if (sy === ey) return false;
+    if (py > sy && py > ey) return false;
+    if (py < sy && py < ey) return false;
+
+    const sx = start.x;
+    const ex = end.x;
+    if (px > sx && px > ex) return false;
+    if (px < sx && px < ex) {
+      if (py === sy && prevDirection !== thisDirection) return false;
+      return true;
+    }
+
+    // check the side
+    const dx = ex - sx;
+    const dy = ey - sy;
+    const perpx = dy;
+    const perpy = -dx;
+
+    const pdx = px - sx;
+    const pdy = py - sy;
+
+    const dot = perpx * pdx + perpy * pdy;
+
+    if (Math.sign(dot) !== Math.sign(perpx)) return true;
+    return false;
+  }
+
+  lineCrossesLine(l1: any, l2: any) {
+    function ccw(A: any, B: any, C: any) {
+      return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+    }
+
+    const A = l1.start;
+    const B = l1.end;
+
+    const C = l2.start;
+    const D = l2.end;
+
+    return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
+  }
 }
+
+// class MBG extends THREE.BufferGeometry {
+//   boundsTree: any;
+//   constructor(bg: THREE.BufferGeometry) {
+//     super();
+//     this.copy(bg);
+//     this.boundsTree = new MeshBVH(this as THREE.BufferGeometry);
+//   }
+// }
