@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { DragControls } from "three/examples/jsm/controls/DragControls";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
-import { MeshBVH } from "three-mesh-bvh";
+// import { MeshBVH } from "three-mesh-bvh";
 
 const CAMERA_FOV = 50;
 const WIREFRAME_COLOR = 0x004444;
@@ -166,9 +166,9 @@ class LoadedModel {
       mesh.geometry.computeBoundingSphere();
 
       // @ts-ignore // todo: バージョン上げれば解決するはず
-      mesh.geometry.boundsTree = new MeshBVH(mesh.geometry, {
-        lazyGeneration: false,
-      });
+      // mesh.geometry.boundsTree = new MeshBVH(mesh.geometry, {
+      //   lazyGeneration: false,
+      // });
 
       const selectMesh = new THREE.Mesh(
         mesh.geometry.clone(),
@@ -1433,71 +1433,71 @@ export default class ThreeMeshControl {
         const indices: number[] = [];
 
         // @ts-ignore // todo: バージョン上げれば解決するはず
-        mesh.geometry.boundsTree.shapecast(
-          mesh,
-          // todo: 型見つける
-          (box: any, isLeaf: any, score: any, depth: any) => {
-            return 1; // todo: BoundsTree 使うならここ
-          },
-          (
-            tri: any,
-            a: number,
-            b: number,
-            c: number,
-            contained: any,
-            depth: any
-          ) => {
-            const selectModel = true; // todo: ?
-            if (contained) {
-              indices.push(a, b, c);
-              return selectModel;
-            }
+        // mesh.geometry.boundsTree.shapecast(
+        //   mesh,
+        //   // todo: 型見つける
+        //   (box: any, isLeaf: any, score: any, depth: any) => {
+        //     return 1; // todo: BoundsTree 使うならここ
+        //   },
+        //   (
+        //     tri: any,
+        //     a: number,
+        //     b: number,
+        //     c: number,
+        //     contained: any,
+        //     depth: any
+        //   ) => {
+        //     const selectModel = true; // todo: ?
+        //     if (contained) {
+        //       indices.push(a, b, c);
+        //       return selectModel;
+        //     }
 
-            const segmentsToCheck = this.lassoSegments; // this.perBoundsSegments[depth]
-            const vertices = [tri.a, tri.b, tri.c];
+        //     const segmentsToCheck = this.lassoSegments; // this.perBoundsSegments[depth]
+        //     const vertices = [tri.a, tri.b, tri.c];
 
-            for (let j = 0; j < 3; j++) {
-              const v = vertices[j];
-              v.applyMatrix4(this.toScreenSpaceMatrix);
+        //     for (let j = 0; j < 3; j++) {
+        //       const v = vertices[j];
+        //       v.applyMatrix4(this.toScreenSpaceMatrix);
 
-              const crossings = this.pointRayCrossesSegments(
-                v,
-                segmentsToCheck
-              );
-              if (crossings % 2 === 1) {
-                indices.push(a, b, c);
-                return selectModel;
-              }
-            }
+        //       const crossings = this.pointRayCrossesSegments(
+        //         v,
+        //         segmentsToCheck
+        //       );
+        //       if (crossings % 2 === 1) {
+        //         indices.push(a, b, c);
+        //         return selectModel;
+        //       }
+        //     }
 
-            const lines = [
-              this.boxLines[0],
-              this.boxLines[1],
-              this.boxLines[2],
-            ];
+        //     const lines = [
+        //       this.boxLines[0],
+        //       this.boxLines[1],
+        //       this.boxLines[2],
+        //     ];
 
-            lines[0].start.copy(tri.a);
-            lines[0].end.copy(tri.b);
+        //     lines[0].start.copy(tri.a);
+        //     lines[0].end.copy(tri.b);
 
-            lines[1].start.copy(tri.b);
-            lines[1].end.copy(tri.c);
+        //     lines[1].start.copy(tri.b);
+        //     lines[1].end.copy(tri.c);
 
-            lines[2].start.copy(tri.c);
-            lines[2].end.copy(tri.a);
+        //     lines[2].start.copy(tri.c);
+        //     lines[2].end.copy(tri.a);
 
-            for (let i = 0; i < 3; i++) {
-              const l = lines[i];
-              for (let s = 0, sl = segmentsToCheck.length; s < sl; s++) {
-                if (this.lineCrossesLine(l, segmentsToCheck[s])) {
-                  indices.push(a, b, c);
-                  return selectModel;
-                }
-              }
-            }
+        //     for (let i = 0; i < 3; i++) {
+        //       const l = lines[i];
+        //       for (let s = 0, sl = segmentsToCheck.length; s < sl; s++) {
+        //         if (this.lineCrossesLine(l, segmentsToCheck[s])) {
+        //           indices.push(a, b, c);
+        //           return selectModel;
+        //         }
+        //       }
+        //     }
 
-            return false;
-          }
-        );
+        //     return false;
+        //   }
+        // );
 
         const indexAttr = mesh.geometry.index;
         const newIndexAttr = model.selectMeshes[index].geometry.index;
