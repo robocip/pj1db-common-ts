@@ -1,11 +1,10 @@
-/* eslint-disable */ // todo: 消す
 /* eslint-disable prefer-destructuring */
 /* eslint-disable no-param-reassign */
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { DragControls } from "three/examples/jsm/controls/DragControls";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
-// import { MeshBVH } from "three-mesh-bvh";
+import { MeshBVH } from "three-mesh-bvh";
 
 const CAMERA_FOV = 50;
 const WIREFRAME_COLOR = 0x004444;
@@ -47,8 +46,6 @@ export type MaterialType = "wireframe" | "original" | "solid";
 
 export type ViewpointType = "xyz" | "x" | "y" | "z" | "-x" | "-y" | "-z";
 
-export type OperationType = "ObjectOperation" | "MeshSelection";
-
 export type SelectType = "lasso" | "rectangle";
 
 export type ConstraintType = {
@@ -70,6 +67,16 @@ const materialDict = {
     color: SOLID_COLOR,
   }),
 };
+
+class MBG extends THREE.BufferGeometry {
+  boundsTree: any;
+
+  constructor(bg: THREE.BufferGeometry) {
+    super();
+    this.copy(bg);
+    this.boundsTree = new MeshBVH(this as THREE.BufferGeometry);
+  }
+}
 
 class BoundingBox {
   minPos: THREE.Vector3;
@@ -146,7 +153,8 @@ class LoadedModel {
 
   loadedOriginalMaterial: THREE.Material[];
 
-  selectMeshes: THREE.Mesh[] = [];
+  selectMeshes: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] =
+    [];
 
   constructor(gltf: GLTF) {
     console.log("LoadedModel construct");
@@ -165,23 +173,39 @@ class LoadedModel {
       mesh.geometry.computeBoundingBox();
       mesh.geometry.computeBoundingSphere();
 
-      // @ts-ignore // todo: バージョン上げれば解決するはず
-      // mesh.geometry.boundsTree = new MeshBVH(mesh.geometry, {
-      //   lazyGeneration: false,
-      // });
+      (mesh.geometry as MBG).boundsTree = new MeshBVH(mesh.geometry, {
+        lazyGeneration: false,
+      });
 
-      const selectMesh = new THREE.Mesh(
-        mesh.geometry.clone(),
-        new THREE.MeshBasicMaterial({
-          color: 0x9dcce5, // todo: 色どうする？
-          opacity: 0.05,
-          transparent: true,
-          depthWrite: false,
-        })
-      );
-      selectMesh.renderOrder = 1;
-      this.selectMeshes.push(selectMesh);
+      this.selectMeshes.push(new THREE.Mesh());
+      this.selectMeshes[index].geometry = mesh.geometry.clone();
+      this.selectMeshes[index].geometry.drawRange.count = 0;
+      this.selectMeshes[index].material = new THREE.MeshBasicMaterial({
+        opacity: 0.05,
+        transparent: true,
+        depthWrite: false,
+      });
+
+      this.selectMeshes[index].material.color
+        .set(0xffffff)
+        .convertSRGBToLinear();
+      this.selectMeshes[index].renderOrder = 1;
       this.group.add(this.selectMeshes[index]);
+
+      const wireHighlight = new THREE.Mesh<
+        THREE.BufferGeometry,
+        THREE.Material | THREE.Material[]
+      >();
+      wireHighlight.geometry = this.selectMeshes[index].geometry;
+      wireHighlight.material = new THREE.MeshBasicMaterial({
+        color: this.selectMeshes[index].material.color,
+        opacity: 0.25,
+        transparent: true,
+        wireframe: true,
+        depthWrite: false,
+      });
+      wireHighlight.renderOrder = 2;
+      this.group.add(wireHighlight);
     });
     // correct boundingbox is available after render()
     this.rotation = new THREE.Quaternion();
@@ -490,6 +514,8 @@ export default class ThreeMeshControl {
 
   selectAreaUpdate = false;
 
+  selectAreaShapeUpdate = false;
+
   selectAreaCoordinates: number[] = [];
 
   selectAreaStartPointer = new THREE.Vector2();
@@ -499,8 +525,6 @@ export default class ThreeMeshControl {
   tempVec1 = new THREE.Vector2();
 
   tempVec2 = new THREE.Vector2();
-
-  operationType: OperationType = "ObjectOperation";
 
   selectType: SelectType = "lasso";
 
@@ -512,7 +536,9 @@ export default class ThreeMeshControl {
 
   lassoSegments: THREE.Line3[] = [];
 
-  perBoundsSegments: number[] = [];
+  perBoundsSegments: THREE.Line3[][] = []; // todo: 多分型が
+
+  leftDragging = false;
 
   constructor(
     renderAreaSize: number,
@@ -538,7 +564,8 @@ export default class ThreeMeshControl {
         const b = this.renderer.domElement.getBoundingClientRect();
         this.pointer.x = ((event.clientX - b.left) / renderAreaSize) * 2 - 1;
         this.pointer.y = -((event.clientY - b.top) / renderAreaSize) * 2 + 1;
-        if (this.dragging && this.operationType === "MeshSelection")
+
+        if (this.leftDragging)
           this._selectAreaCorrdinatesUpdate(
             event,
             this.pointer.x,
@@ -551,10 +578,10 @@ export default class ThreeMeshControl {
           ((event.clientX - b.left) / renderAreaSize) * 2 - 1;
         this.selectAreaStartPointer.y =
           -((event.clientY - b.top) / renderAreaSize) * 2 + 1;
-
         this.selectAreaCoordinates.length = 0;
-
         this.dragging = true;
+        if (event.button === 2) this.leftDragging = true;
+
         if (Math.abs(this.pointer.x) >= 1 || Math.abs(this.pointer.y) >= 1)
           return;
         const objectList = this._getObjectListAtMouseCursol();
@@ -578,8 +605,9 @@ export default class ThreeMeshControl {
       },
       onMouseUp: (event: MouseEvent) => {
         this.selectArea.visible = false;
-        if (this.selectAreaCoordinates.length) this.selectAreaUpdate = true;
         this.dragging = false;
+        this.leftDragging = false;
+        if (this.selectAreaCoordinates.length) this.selectAreaUpdate = true;
       },
       onDragStart: (event: THREE.Event) => {
         this.controls.orbit.enabled = false;
@@ -943,17 +971,6 @@ export default class ThreeMeshControl {
     });
   }
 
-  setOperationType(operationType: OperationType) {
-    this.operationType = operationType;
-    if (this.operationType === "MeshSelection") {
-      this.controls.orbit.enableRotate = false;
-      this.controls.orbit.enableZoom = false;
-    } else if (this.operationType === "ObjectOperation") {
-      this.controls.orbit.enableRotate = true;
-      this.controls.orbit.enableZoom = true;
-    }
-  }
-
   setSelectType(selectType: SelectType) {
     this.selectType = selectType;
   }
@@ -1291,25 +1308,35 @@ export default class ThreeMeshControl {
         this.callbacks.onObjectHover(obejectList);
     }
 
-    if (this.selectType === "lasso") {
-      const ogLength = this.selectAreaCoordinates.length;
-      this.selectAreaCoordinates.push(
-        this.selectAreaCoordinates[0],
-        this.selectAreaCoordinates[1],
-        this.selectAreaCoordinates[2]
-      );
-      this.selectArea.geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
-      );
-      this.selectAreaCoordinates.length = ogLength;
-    } else if (this.selectType === "rectangle") {
-      this.selectArea.geometry.setAttribute(
-        "position",
-        new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
-      );
+    if (this.selectAreaShapeUpdate) {
+      if (this.selectType === "lasso") {
+        const ogLength = this.selectAreaCoordinates.length;
+        this.selectAreaCoordinates.push(
+          this.selectAreaCoordinates[0],
+          this.selectAreaCoordinates[1],
+          this.selectAreaCoordinates[2]
+        );
+        this.selectArea.geometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
+        );
+        this.selectAreaCoordinates.length = ogLength;
+      } else if (this.selectType === "rectangle") {
+        this.selectArea.geometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(this.selectAreaCoordinates, 3, false)
+        );
+      }
+      this.selectArea.frustumCulled = false;
+      this.selectAreaShapeUpdate = false;
     }
-    this.selectArea.frustumCulled = false;
+
+    if (this.selectAreaUpdate) {
+      this.selectAreaUpdate = false;
+      if (this.selectAreaCoordinates.length > 0) {
+        this._selectMeshHighlight();
+      }
+    }
 
     if (this.controls.camera instanceof THREE.PerspectiveCamera) {
       const scale =
@@ -1322,20 +1349,6 @@ export default class ThreeMeshControl {
       );
     } else if (this.controls.camera instanceof THREE.OrthographicCamera) {
       console.warn("並行投影は未対応");
-      // todo: OrthographicCamera に対応したものを作成
-      // const height = Math.abs(
-      //   this.controls.camera.top - this.controls.camera.bottom
-      // );
-      // const width = Math.abs(
-      //   this.controls.camera.right - this.controls.camera.left
-      // );
-      // this.selectionShape.scale.set(width / 2, height / 2, 1);
-    }
-
-    if (this.selectAreaUpdate) this.selectAreaUpdate = false;
-    if (this.selectAreaCoordinates.length > 0) {
-      // 選択領域が存在する場合、メッシュをハイライトさせる
-      this._selectMeshHighlight();
     }
 
     this.renderer.autoClear = false;
@@ -1405,6 +1418,7 @@ export default class ThreeMeshControl {
       this.selectAreaCoordinates[13] = this.selectAreaStartPointer.y;
       this.selectAreaCoordinates[14] = 0;
     }
+    this.selectAreaShapeUpdate = true;
     this.selectArea.visible = true;
     this.selectAreaUpdate = true;
   }
@@ -1416,6 +1430,7 @@ export default class ThreeMeshControl {
           .copy(mesh.matrixWorld)
           .premultiply(this.controls.camera.matrixWorldInverse)
           .premultiply(this.controls.camera.projectionMatrix);
+
         while (this.lassoSegments.length < this.selectAreaCoordinates.length) {
           this.lassoSegments.push(new THREE.Line3());
         }
@@ -1432,110 +1447,172 @@ export default class ThreeMeshControl {
         }
         const indices: number[] = [];
 
-        // @ts-ignore // todo: バージョン上げれば解決するはず
-        // mesh.geometry.boundsTree.shapecast(
-        //   mesh,
-        //   // todo: 型見つける
-        //   (box: any, isLeaf: any, score: any, depth: any) => {
-        //     return 1; // todo: BoundsTree 使うならここ
-        //   },
-        //   (
-        //     tri: any,
-        //     a: number,
-        //     b: number,
-        //     c: number,
-        //     contained: any,
-        //     depth: any
-        //   ) => {
-        //     const selectModel = true; // todo: ?
-        //     if (contained) {
-        //       indices.push(a, b, c);
-        //       return selectModel;
-        //     }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+        (mesh.geometry as MBG).boundsTree.shapecast(
+          mesh,
+          (
+            box: THREE.Box3,
+            isLeaf: boolean,
+            score: number | undefined,
+            depth: number
+          ) => {
+            const { min, max } = box;
+            let boxIndex = 0;
 
-        //     const segmentsToCheck = this.lassoSegments; // this.perBoundsSegments[depth]
-        //     const vertices = [tri.a, tri.b, tri.c];
+            let minY = Infinity;
+            let maxY = -Infinity;
+            let minX = Infinity;
+            for (let x = 0; x <= 1; x += 1) {
+              for (let y = 0; y <= 1; y += 1) {
+                for (let z = 0; z <= 1; z += 1) {
+                  const v = this.boxPoints[boxIndex];
+                  v.x = x === 0 ? min.x : max.x;
+                  v.y = y === 0 ? min.y : max.y;
+                  v.z = z === 0 ? min.z : max.z;
+                  // v.w = 1;
+                  v.applyMatrix4(this.toScreenSpaceMatrix);
+                  boxIndex += 1;
 
-        //     for (let j = 0; j < 3; j++) {
-        //       const v = vertices[j];
-        //       v.applyMatrix4(this.toScreenSpaceMatrix);
+                  if (v.y < minY) minY = v.y;
+                  if (v.y > maxY) maxY = v.y;
+                  if (v.x < minX) minX = v.x;
+                }
+              }
+            }
 
-        //       const crossings = this.pointRayCrossesSegments(
-        //         v,
-        //         segmentsToCheck
-        //       );
-        //       if (crossings % 2 === 1) {
-        //         indices.push(a, b, c);
-        //         return selectModel;
-        //       }
-        //     }
+            // Find all the relevant segments here and cache them in the above array for
+            // subsequent child checks to use.
+            const parentSegments =
+              this.perBoundsSegments[depth - 1] || this.lassoSegments;
+            const segmentsToCheck = this.perBoundsSegments[depth] || [];
+            segmentsToCheck.length = 0;
+            this.perBoundsSegments[depth] = segmentsToCheck;
+            for (let i = 0, l = parentSegments.length; i < l; i += 1) {
+              const line = parentSegments[i];
+              segmentsToCheck.push(line);
+            }
 
-        //     const lines = [
-        //       this.boxLines[0],
-        //       this.boxLines[1],
-        //       this.boxLines[2],
-        //     ];
+            if (segmentsToCheck.length === 0) {
+              return 0;
+            }
 
-        //     lines[0].start.copy(tri.a);
-        //     lines[0].end.copy(tri.b);
+            // Get the screen space hull lines
+            const hull = ThreeMeshControl.getConvexHull(this.boxPoints);
+            const lines = hull.map((p, i) => {
+              const nextP = hull[(i + 1) % hull.length];
+              const line = this.boxLines[i];
+              line.start.copy(p);
+              line.end.copy(nextP);
+              return line;
+            });
 
-        //     lines[1].start.copy(tri.b);
-        //     lines[1].end.copy(tri.c);
+            // If a lasso point is inside the hull then it's intersected and cannot be contained
+            if (
+              ThreeMeshControl.pointRayCrossesSegments(
+                segmentsToCheck[0].start,
+                lines
+              ) %
+                2 ===
+              1
+            ) {
+              return 1;
+            }
 
-        //     lines[2].start.copy(tri.c);
-        //     lines[2].end.copy(tri.a);
+            // check if the screen space hull is in the lasso
+            let crossings = 0;
+            for (let i = 0, l = hull.length; i < l; i += 1) {
+              const v = hull[i];
+              const pCrossings = ThreeMeshControl.pointRayCrossesSegments(
+                v,
+                segmentsToCheck
+              );
 
-        //     for (let i = 0; i < 3; i++) {
-        //       const l = lines[i];
-        //       for (let s = 0, sl = segmentsToCheck.length; s < sl; s++) {
-        //         if (this.lineCrossesLine(l, segmentsToCheck[s])) {
-        //           indices.push(a, b, c);
-        //           return selectModel;
-        //         }
-        //       }
-        //     }
+              if (i === 0) crossings = pCrossings;
 
-        //     return false;
-        //   }
-        // );
+              if (crossings !== pCrossings) return 1;
+            }
+
+            for (let i = 0, l = lines.length; i < l; i += 1) {
+              const boxLine = lines[i];
+              for (let s = 0, ls = segmentsToCheck.length; s < ls; s += 1) {
+                if (
+                  ThreeMeshControl.lineCrossesLine(boxLine, segmentsToCheck[s])
+                ) {
+                  return 1;
+                }
+              }
+            }
+
+            return crossings % 2 === 0 ? 0 : 2;
+          },
+          (
+            tri: THREE.Triangle,
+            a: number,
+            b: number,
+            c: number,
+            contained: boolean,
+            depth: number
+          ) => {
+            const selectModel = false;
+
+            if (contained) {
+              indices.push(a, b, c);
+              return selectModel;
+            }
+            const segmentsToCheck = this.perBoundsSegments[depth];
+
+            // get the center of the triangle
+            const centroid = tri.a
+              .add(tri.b)
+              .add(tri.c)
+              .multiplyScalar(1 / 3);
+            centroid.applyMatrix4(this.toScreenSpaceMatrix);
+
+            // counting the crossings
+            const crossings = ThreeMeshControl.pointRayCrossesSegments(
+              centroid,
+              segmentsToCheck
+            );
+            if (crossings % 2 === 1) {
+              indices.push(a, b, c);
+              return selectModel;
+            }
+            return false;
+          }
+        );
 
         const indexAttr = mesh.geometry.index;
         const newIndexAttr = model.selectMeshes[index].geometry.index;
         if (indexAttr && newIndexAttr) {
-          if (indices.length) {
-            // if we found indices and we want to select the whole model
-            for (let i = 0, l = indexAttr.count; i < l; i++) {
-              const i2 = indexAttr.getX(i);
-              newIndexAttr.setX(i, i2);
-            }
-
-            model.selectMeshes[index].geometry.drawRange.count = Infinity;
-            newIndexAttr.needsUpdate = true;
-          } else {
-            // update the highlight mesh
-            for (let i = 0, l = indices.length; i < l; i++) {
-              const i2 = indexAttr.getX(indices[i]);
-              newIndexAttr.setX(i, i2);
-            }
-
-            model.selectMeshes[index].geometry.drawRange.count = indices.length;
-            newIndexAttr.needsUpdate = true;
+          for (let i = 0, l = indices.length; i < l; i += 1) {
+            newIndexAttr.setX(i, indexAttr.getX(indices[i]));
           }
+          model.selectMeshes[index].geometry.drawRange.count = indices.length;
+          newIndexAttr.needsUpdate = true;
         }
-        //
       });
     });
   }
 
-  pointRayCrossesSegments(point: any, segments: THREE.Line3[]) {
+  static pointRayCrossesSegments(
+    point: THREE.Vector3,
+    segments: THREE.Line3[]
+  ) {
     let crossings = 0;
     const firstSeg = segments[segments.length - 1];
     let prevDirection = firstSeg.start.y > firstSeg.end.y;
-    for (let s = 0, l = segments.length; s < l; s++) {
+    for (let s = 0, l = segments.length; s < l; s += 1) {
       const line = segments[s];
       const thisDirection = line.start.y > line.end.y;
-      if (this.pointRayCrossesLine(point, line, prevDirection, thisDirection)) {
-        crossings++;
+      if (
+        ThreeMeshControl.pointRayCrossesLine(
+          point,
+          line,
+          prevDirection,
+          thisDirection
+        )
+      ) {
+        crossings += 1;
       }
 
       prevDirection = thisDirection;
@@ -1544,11 +1621,11 @@ export default class ThreeMeshControl {
     return crossings;
   }
 
-  pointRayCrossesLine(
-    point: any,
-    line: any,
-    prevDirection: any,
-    thisDirection: any
+  static pointRayCrossesLine(
+    point: THREE.Vector3,
+    line: THREE.Line3,
+    prevDirection: boolean,
+    thisDirection: boolean
   ) {
     const { start, end } = line;
     const px = point.x;
@@ -1584,8 +1661,8 @@ export default class ThreeMeshControl {
     return false;
   }
 
-  lineCrossesLine(l1: any, l2: any) {
-    function ccw(A: any, B: any, C: any) {
+  static lineCrossesLine(l1: THREE.Line3, l2: THREE.Line3) {
+    function ccw(A: THREE.Vector3, B: THREE.Vector3, C: THREE.Vector3) {
       return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
     }
 
@@ -1597,13 +1674,63 @@ export default class ThreeMeshControl {
 
     return ccw(A, C, D) !== ccw(B, C, D) && ccw(A, B, C) !== ccw(A, B, D);
   }
-}
 
-// class MBG extends THREE.BufferGeometry {
-//   boundsTree: any;
-//   constructor(bg: THREE.BufferGeometry) {
-//     super();
-//     this.copy(bg);
-//     this.boundsTree = new MeshBVH(this as THREE.BufferGeometry);
-//   }
-// }
+  static getConvexHull(points: THREE.Vector3[]) {
+    function orientation(p: THREE.Vector3, q: THREE.Vector3, r: THREE.Vector3) {
+      const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+      if (val === 0) return 0;
+      return val > 0 ? 1 : 2;
+    }
+
+    function distSq(p1: THREE.Vector3, p2: THREE.Vector3) {
+      return (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y);
+    }
+
+    function compare(p1: THREE.Vector3, p2: THREE.Vector3) {
+      const o = orientation(p0, p1, p2);
+      if (o === 0) return distSq(p0, p2) >= distSq(p0, p1) ? -1 : 1;
+      return o === 2 ? -1 : 1;
+    }
+
+    let lowestY = Infinity;
+    let lowestIndex = -1;
+    for (let i = 0, l = points.length; i < l; i += 1) {
+      const p = points[i];
+      if (p.y < lowestY) {
+        lowestIndex = i;
+        lowestY = p.y;
+      }
+    }
+
+    const p0 = points[lowestIndex];
+    points[lowestIndex] = points[0];
+    points[0] = p0;
+
+    points = points.sort(compare);
+
+    let m = 1;
+    const n = points.length;
+    for (let i = 1; i < n; i += 1) {
+      while (i < n - 1 && orientation(p0, points[i], points[i + 1]) === 0) {
+        i += 1;
+      }
+
+      points[m] = points[i];
+      m += 1;
+    }
+
+    const hull = [points[0], points[1], points[2]];
+    for (let i = 3; i < m; i += 1) {
+      while (
+        orientation(hull[hull.length - 2], hull[hull.length - 1], points[i]) !==
+        2
+      ) {
+        hull.pop();
+      }
+
+      hull.push(points[i]);
+    }
+
+    return hull;
+  }
+}

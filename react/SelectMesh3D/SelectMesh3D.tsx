@@ -1,7 +1,6 @@
 import { Flex, RadioGroupField, Radio } from "@aws-amplify/ui-react";
 import { useState, useCallback, useEffect } from "react";
 import ThreeMeshControl, {
-  OperationType,
   SelectType,
 } from "utils/common/react/SelectMesh3D/SelectMeshUtil";
 import AxisIconBox from "utils/common/react/View3D/AxisIconBox";
@@ -173,9 +172,6 @@ export default function SelectMesh3D({
   const changeMaterialType = (materialType: MaterialType) => {
     if (three.control) three.control.setMaterialType(materialType);
   };
-  const changeOperateType = (operationType: OperationType) => {
-    if (three.control) three.control.setOperationType(operationType);
-  };
   const changeDragType = (selectTyoe: SelectType) => {
     if (three.control) three.control.setSelectType(selectTyoe);
   };
@@ -308,28 +304,16 @@ export default function SelectMesh3D({
             </ul>
           </Flex>
         )}
-        <Flex direction="column">
-          <RadioGroupField
-            padding={padding}
-            label="OperateMode"
-            name="OperateMode"
-            defaultValue="ObjectOperation"
-            onChange={(e) => changeOperateType(e.target.value as OperationType)}
-          >
-            <Radio value="ObjectOperation">オブジェクト操作</Radio>
-            <Radio value="MeshSelection">メッシュ選択</Radio>
-          </RadioGroupField>
-          <RadioGroupField
-            padding={padding}
-            label="SelectMode"
-            name="SelectMode"
-            defaultValue="lasso"
-            onChange={(e) => changeDragType(e.target.value as SelectType)}
-          >
-            <Radio value="lasso">ラッソ選択</Radio>
-            <Radio value="rectangle">矩形選択</Radio>
-          </RadioGroupField>
-        </Flex>
+        <RadioGroupField
+          padding={padding}
+          label="SelectMode"
+          name="SelectMode"
+          defaultValue="lasso"
+          onChange={(e) => changeDragType(e.target.value as SelectType)}
+        >
+          <Radio value="lasso">ラッソ選択</Radio>
+          <Radio value="rectangle">矩形選択</Radio>
+        </RadioGroupField>
       </Flex>
     </Flex>
   );
