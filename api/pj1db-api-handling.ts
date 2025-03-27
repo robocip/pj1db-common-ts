@@ -69,6 +69,7 @@ export type FrictionRegionInfo = {
   id: string;
   meshCount: number;
   friction: number | undefined;
+  requiredforcewidth: number | undefined;
 };
 
 export type Grasp2pInfo = {
@@ -147,6 +148,10 @@ export type WriteFrictionResponse = {
   queueCalcStable: string;
 };
 
+export type WriteRequiredForceWidthResponse = {
+  queueCalcStable: string;
+};
+
 export type WriteGravityResponse = {
   queueCalcStable: string;
 };
@@ -210,6 +215,12 @@ export type CalcIndivCandidatePollParam = {
 export type WriteFrictionParam = {
   modelId: string;
   friction: Dict<number | undefined>;
+  creator: string;
+};
+
+export type WriteRequiredForceWidthParam = {
+  modelId: string;
+  requiredforcewidth: Dict<number | undefined>;
   creator: string;
 };
 
