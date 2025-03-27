@@ -187,7 +187,7 @@ class LoadedModel {
       });
 
       this.selectMeshes[index].material.color
-        .set(0xffffff)
+        .set(0x00ffff) // note: メッシュ選択時の色
         .convertSRGBToLinear();
       this.selectMeshes[index].renderOrder = 1;
       this.group.add(this.selectMeshes[index]);
@@ -536,7 +536,7 @@ export default class ThreeMeshControl {
 
   lassoSegments: THREE.Line3[] = [];
 
-  perBoundsSegments: THREE.Line3[][] = []; // todo: 多分型が
+  perBoundsSegments: THREE.Line3[][] = [];
 
   leftDragging = false;
 
@@ -1480,8 +1480,6 @@ export default class ThreeMeshControl {
               }
             }
 
-            // Find all the relevant segments here and cache them in the above array for
-            // subsequent child checks to use.
             const parentSegments =
               this.perBoundsSegments[depth - 1] || this.lassoSegments;
             const segmentsToCheck = this.perBoundsSegments[depth] || [];
@@ -1496,7 +1494,6 @@ export default class ThreeMeshControl {
               return 0;
             }
 
-            // Get the screen space hull lines
             const hull = ThreeMeshControl.getConvexHull(this.boxPoints);
             const lines = hull.map((p, i) => {
               const nextP = hull[(i + 1) % hull.length];
@@ -1506,7 +1503,6 @@ export default class ThreeMeshControl {
               return line;
             });
 
-            // If a lasso point is inside the hull then it's intersected and cannot be contained
             if (
               ThreeMeshControl.pointRayCrossesSegments(
                 segmentsToCheck[0].start,
@@ -1518,7 +1514,6 @@ export default class ThreeMeshControl {
               return 1;
             }
 
-            // check if the screen space hull is in the lasso
             let crossings = 0;
             for (let i = 0, l = hull.length; i < l; i += 1) {
               const v = hull[i];
@@ -1528,7 +1523,6 @@ export default class ThreeMeshControl {
               );
 
               if (i === 0) crossings = pCrossings;
-
               if (crossings !== pCrossings) return 1;
             }
 
@@ -1560,15 +1554,11 @@ export default class ThreeMeshControl {
               return selectModel;
             }
             const segmentsToCheck = this.perBoundsSegments[depth];
-
-            // get the center of the triangle
             const centroid = tri.a
               .add(tri.b)
               .add(tri.c)
               .multiplyScalar(1 / 3);
             centroid.applyMatrix4(this.toScreenSpaceMatrix);
-
-            // counting the crossings
             const crossings = ThreeMeshControl.pointRayCrossesSegments(
               centroid,
               segmentsToCheck
@@ -1582,13 +1572,13 @@ export default class ThreeMeshControl {
         );
 
         const indexAttr = mesh.geometry.index;
-        const newIndexAttr = model.selectMeshes[index].geometry.index;
-        if (indexAttr && newIndexAttr) {
+        const selectIndexAttr = model.selectMeshes[index].geometry.index;
+        if (indexAttr && selectIndexAttr) {
           for (let i = 0, l = indices.length; i < l; i += 1) {
-            newIndexAttr.setX(i, indexAttr.getX(indices[i]));
+            selectIndexAttr.setX(i, indexAttr.getX(indices[i]));
           }
           model.selectMeshes[index].geometry.drawRange.count = indices.length;
-          newIndexAttr.needsUpdate = true;
+          selectIndexAttr.needsUpdate = true;
         }
       });
     });

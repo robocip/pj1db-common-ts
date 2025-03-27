@@ -80,7 +80,7 @@ export default function SelectMesh3D({
   callbacks = undefined,
   setLoadError = undefined,
 }: Props) {
-  // console.log("SelectMesh3D render");  // todo:
+  console.log("SelectMesh3D render");
 
   const [cameraPos, setCameraPos] = useState<number[]>([0, 0, 0]);
   const [cameraZoom, setCameraZoom] = useState<number | undefined>();
@@ -92,17 +92,15 @@ export default function SelectMesh3D({
   const onObjectHover = useCallback(
     (objectList: THREE.Object3D[]) => {
       if (objectList.length !== hoverObjectList.length) {
-        // todo:
-        // console.log(
-        //   `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
-        // );
+        console.log(
+          `View3D hover object changed ${hoverObjectList.length} -> ${objectList.length}`
+        );
         setHoverObjectList(objectList);
       } else {
         // eslint-disable-next-line no-restricted-syntax
         for (const obj of objectList) {
           if (!hoverObjectList.includes(obj)) {
-            // todo :
-            // console.log(`View3D hover object changed ${obj.name}`);
+            console.log(`View3D hover object changed ${obj.name}`);
             setHoverObjectList(objectList);
             break;
           }
