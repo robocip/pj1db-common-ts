@@ -5,6 +5,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { DragControls } from "three/examples/jsm/controls/DragControls";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { MeshBVH } from "three-mesh-bvh";
+import { log } from "console";
 
 const CAMERA_FOV = 50;
 const WIREFRAME_COLOR = 0x004444;
@@ -608,6 +609,13 @@ export default class ThreeMeshControl {
         this.dragging = false;
         this.leftDragging = false;
         if (this.selectAreaCoordinates.length) this.selectAreaUpdate = true;
+        console.log("選択されたメッシュデータ");
+        this.objects.loadedModels.forEach((model) => {
+          model.selectMeshes.forEach((selectedMesh, index) => {
+            console.log(`メッシュデータ [${index}]`);
+            console.log(selectedMesh.geometry);
+          });
+        });
       },
       onDragStart: (event: THREE.Event) => {
         this.controls.orbit.enabled = false;
@@ -1577,6 +1585,7 @@ export default class ThreeMeshControl {
           for (let i = 0, l = indices.length; i < l; i += 1) {
             selectIndexAttr.setX(i, indexAttr.getX(indices[i]));
           }
+          // note: model.selectMeshes[] が選択したメッシュの領域
           model.selectMeshes[index].geometry.drawRange.count = indices.length;
           selectIndexAttr.needsUpdate = true;
         }
