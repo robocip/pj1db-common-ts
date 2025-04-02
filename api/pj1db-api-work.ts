@@ -30,11 +30,18 @@ export interface WorkModelAttr extends RobocipDbDocument {
   upDirection: DirectionField;
   extra: object;
 }
+
+type Model = {
+  "model-id": string;
+  "model-role"?: string;
+}
+
 export interface WorkInstanceAttr extends RobocipDbDocument {
   calc: Dict<unknown>;
   "instance-id": string;
   "class-id": string;
   description: string;
+  models: Model[];
   extra: object;
 }
 export interface WorkClassAttr extends RobocipDbDocument {
@@ -45,7 +52,6 @@ export interface WorkClassAttr extends RobocipDbDocument {
   nameEn: string;
   standingPosture: object;
   extra: object;
-
   children: string[];
   instances: string[];
 }
@@ -208,6 +214,10 @@ export interface UpdateModelParam {
   extra?: object; // 任意のキーバリューからなる属性値
 }
 
+export interface UpdateModelRoleParam {
+  modelId: string; // 代表モデルに設定するIDを指定する
+}
+
 export interface InsertInstanceParam {
   version: string; // モデル属性データの形式versionを識別する文字列（versionID）を指定する。 versionIDは、数字,英字及びハイフン（-）の組み合わせからなる文字列とする（大文字小文字は区別する）
   classId?: string; //
@@ -259,7 +269,6 @@ export interface FindOneCallArgs {
  */
 
 export const defaultHideKeysInCalc = [
-  "model-id",
   "instance-id",
   "class-id",
   "s3Key",
@@ -337,6 +346,13 @@ export const workApi: Dict<FuncDef> = {
       "extra",
     ],
     omitKeyWhenValueUndefined: false,
+  },
+  updateModelRole: {
+    // DBの代表モデルを更新します。
+    method: "post",
+    name: "updateModelRole_sync",
+    path: ["modelId"],
+    omitKeyWhenValueUndefined: true,
   },
   insertInstance: {
     // DBへインスタンスデータを書き込みます。
